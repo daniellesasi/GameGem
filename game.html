@@ -3491,10 +3491,11 @@ function startGame() {
     stagePearlSpawn = _cfg.pearlSpawn;
 
     // Re-seed items using only the stage's allowed gem types
+    const _itemCount = _cfg.itemCount || 25;
     items.length = 0;
-    for (let i = 0; i < 25; i++) items.push(spawn(i > 5));
-    items.push(spawn(false, undefined, undefined, stageItemTypes[0])); // guaranteed first type near player
-    items.push(spawn(false, undefined, undefined, stageItemTypes[Math.min(1, stageItemTypes.length - 1)]));
+    for (let i = 0; i < _itemCount; i++) items.push(spawn(i > 5));
+    // Guarantee at least one of each unlocked type near the player
+    stageItemTypes.forEach(t => items.push(spawn(false, undefined, undefined, t)));
 
     // Re-seed enemies (or leave empty for early stages)
     enemies.length = 0;
@@ -3534,21 +3535,27 @@ const HEART_MAX = 5;
 // ─────────────────────────────────────────────
 // STAGE CONFIGURATION
 // ─────────────────────────────────────────────
-// Each stage unlocks one more gem type (matching necklace gem order),
-// then gradually introduces bomb enemy, spiky enemy, spotlights, and pearls.
+// itemCount: how many gems to seed at start (more in early stages for quicker play)
+// Mechanic introduction:
+//   1-2  gems only
+//   3-4  + spotlights
+//   5-6  + spiky enemy (still no bomb)
+//   7    + pearls (still no bomb)
+//   8    + bomb (no spiky)
+//   9-12 full game
 const STAGE_CONFIG = [
-    /* 1  Green Star   */ { itemTypes: ['gem'],                                                                                           enemyTypes: [],                           spotlights: false, pearlSpawn: false },
-    /* 2  Blue Sapph.  */ { itemTypes: ['gem', 'shard2'],                                                                                 enemyTypes: [],                           spotlights: false, pearlSpawn: false },
-    /* 3  Peach Drop   */ { itemTypes: ['gem', 'shard2', 'shard5'],                                                                       enemyTypes: ['pointDrainer1'],            spotlights: false, pearlSpawn: false },
-    /* 4  Garnet Hex   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1'],                                                             enemyTypes: ['pointDrainer1'],            spotlights: false, pearlSpawn: false },
-    /* 5  Aquamarine   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4'],                                                   enemyTypes: ['pointDrainer1', 'standard'],spotlights: false, pearlSpawn: false },
-    /* 6  Amethyst     */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1'],                                        enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: false },
-    /* 7  Blue Crystal */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3'],                              enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
-    /* 8  Blue Heart   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6'],                    enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
-    /* 9  Grn Marquise */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7'],          enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
-    /* 10 Small Green  */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2'],                   enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
-    /* 11 Red Orange   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3'],        enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
-    /* 12 Dark Pink    */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3', 'custom4'],enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 1  Green Star   */ { itemTypes: ['gem'],                                                                                                itemCount: 40, enemyTypes: [],                           spotlights: false, pearlSpawn: false },
+    /* 2  Blue Sapph.  */ { itemTypes: ['gem', 'shard2'],                                                                                      itemCount: 38, enemyTypes: [],                           spotlights: false, pearlSpawn: false },
+    /* 3  Peach Drop   */ { itemTypes: ['gem', 'shard2', 'shard5'],                                                                            itemCount: 35, enemyTypes: [],                           spotlights: true,  pearlSpawn: false },
+    /* 4  Garnet Hex   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1'],                                                                  itemCount: 33, enemyTypes: [],                           spotlights: true,  pearlSpawn: false },
+    /* 5  Aquamarine   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4'],                                                        itemCount: 30, enemyTypes: ['standard'],                 spotlights: true,  pearlSpawn: false },
+    /* 6  Amethyst     */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1'],                                             itemCount: 28, enemyTypes: ['standard'],                 spotlights: true,  pearlSpawn: false },
+    /* 7  Blue Crystal */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3'],                                   itemCount: 26, enemyTypes: ['standard'],                 spotlights: true,  pearlSpawn: true  },
+    /* 8  Blue Heart   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6'],                         itemCount: 25, enemyTypes: ['pointDrainer1'],            spotlights: true,  pearlSpawn: true  },
+    /* 9  Grn Marquise */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7'],               itemCount: 25, enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 10 Small Green  */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2'],    itemCount: 25, enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 11 Red Orange   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3'],       itemCount: 25, enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 12 Dark Pink    */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3', 'custom4'],itemCount: 25, enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
 ];
 
 const HEART_REGEN_MS = 2 * 60 * 60 * 1000; // 2 hours
