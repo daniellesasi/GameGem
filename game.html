@@ -1169,14 +1169,16 @@ let items = [], enemies = [];
 const standardItems = ['gem', 'shard1', 'shard2', 'shard3', 'shard4', 'shard5', 'shard6', 'shard7', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5'];
 
 function getLeastUsedItemType() {
+    const pool = (typeof stageItemTypes !== 'undefined' && stageItemTypes.length > 0)
+        ? stageItemTypes : standardItems;
     const counts = {};
-    standardItems.forEach(t => counts[t] = 0);
+    pool.forEach(t => counts[t] = 0);
     items.forEach(it => {
         if (it && it.active && counts[it.type] !== undefined) {
             counts[it.type]++;
         }
     });
-    
+
     let min = Infinity;
     let candidates = [];
     for (const type in counts) {
@@ -1191,7 +1193,10 @@ function getLeastUsedItemType() {
 }
 
 function getLeastUsedEnemyType() {
-    const counts = { 'standard': 0, 'pointDrainer1': 0 };
+    const pool = (typeof stageEnemyTypes !== 'undefined' && stageEnemyTypes.length > 0)
+        ? stageEnemyTypes : ['standard', 'pointDrainer1'];
+    const counts = {};
+    pool.forEach(t => counts[t] = 0);
     enemies.forEach(en => { if (en && en.type) counts[en.type]++; });
     
     let min = Infinity;
@@ -1211,7 +1216,7 @@ function spawn(far = true, overrideX, overrideY, type) {
     let chosenType = type;
     if (!chosenType) {
         const r = Math.random();
-        if (r < 0.08) chosenType = 'pearl';
+        if (r < 0.08 && (typeof stagePearlSpawn === 'undefined' || stagePearlSpawn)) chosenType = 'pearl';
         else chosenType = getLeastUsedItemType(); // Dynamically ensures all items appear evenly
     }
 
@@ -1253,6 +1258,7 @@ function spawn(far = true, overrideX, overrideY, type) {
 }
 
 function spawnEnemy() {
+    if (typeof stageEnemyTypes !== 'undefined' && stageEnemyTypes.length === 0) return null;
     const a = Math.random() * Math.PI * 2;
     const viewR = Math.hypot(canvas.width/camera.zoom, canvas.height/camera.zoom) / 2;
     const d = viewR + 400 + Math.random() * 1500;
@@ -1552,7 +1558,8 @@ function update() {
             if (en.exploding) {
                 en.explodeTimer -= dt;
                 if (en.explodeTimer <= 0) {
-                    enemies[idx] = spawnEnemy();
+                    const _ne = spawnEnemy();
+                    if (_ne) enemies[idx] = _ne; else enemies.splice(idx, 1);
                 }
                 return;
             }
@@ -1614,8 +1621,9 @@ function update() {
             
             if (isHit && hitCooldown <= 0) {
                 if (huntedTime > 0) {
-                    // Eat ALL enemy types while invincible 
-                    enemies[idx] = spawnEnemy();
+                    // Eat ALL enemy types while invincible
+                    const _ne2 = spawnEnemy();
+                    if (_ne2) enemies[idx] = _ne2; else enemies.splice(idx, 1);
                     player.baseR += 15; player.wobbleV += 50;
                     enemiesEaten++;
                     eatenEl.innerText = enemiesEaten;
@@ -1633,7 +1641,8 @@ function update() {
                         updateHealthUI();
                         shakeTime = 15; flashAlpha = 0.7; hitCooldown = 60;
                         spawnHitSplash(player.x, player.y);
-                        enemies[idx] = spawnEnemy();
+                        const _ne3 = spawnEnemy();
+                        if (_ne3) enemies[idx] = _ne3; else enemies.splice(idx, 1);
 
                         if (health <= 0) {
                             winPhase = 3;
@@ -1666,7 +1675,7 @@ function update() {
                     }
                 }
             }
-            if (dist > despawnDist) enemies[idx] = spawnEnemy();
+            if (dist > despawnDist) { const _ne4 = spawnEnemy(); if (_ne4) enemies[idx] = _ne4; else enemies.splice(idx, 1); }
         });
         const dangerPct = Math.max(0, Math.min(100, (1 - (closestEnemy - 800) / 1700) * 100));
         dangerFill.style.height    = dangerPct + '%';
@@ -3470,12 +3479,36 @@ function startGame() {
     document.getElementById('customizer-overlay').style.display = 'none';
     document.getElementById('main-menu').classList.remove('visible');
 
+    // ── Apply stage-specific configuration ──────────────────────────────
+    const _sIdx = (playingStage >= 1 && playingStage <= STAGE_CONFIG.length)
+        ? playingStage - 1 : STAGE_CONFIG.length - 1;
+    const _cfg = STAGE_CONFIG[_sIdx];
+    stageItemTypes  = _cfg.itemTypes.slice();
+    stageEnemyTypes = _cfg.enemyTypes.slice();
+    stagePearlSpawn = _cfg.pearlSpawn;
+
+    // Re-seed items using only the stage's allowed gem types
+    items.length = 0;
+    for (let i = 0; i < 25; i++) items.push(spawn(i > 5));
+    items.push(spawn(false, undefined, undefined, stageItemTypes[0])); // guaranteed first type near player
+    items.push(spawn(false, undefined, undefined, stageItemTypes[Math.min(1, stageItemTypes.length - 1)]));
+
+    // Re-seed enemies (or leave empty for early stages)
+    enemies.length = 0;
+    if (stageEnemyTypes.length > 0) {
+        for (let i = 0; i < 6; i++) { const e = spawnEnemy(); if (e) enemies.push(e); }
+    }
+
+    // Re-seed spotlights
+    spotlights.length = 0;
+    if (_cfg.spotlights) initSpotlights();
+
     // Show game HUD & canvas
     document.getElementById('gameCanvas').style.display = '';
     document.getElementById('score-container').style.display = '';
     document.getElementById('eaten-container').style.display = '';
     document.getElementById('health-bar').style.display = '';
-    document.getElementById('danger-bar').style.display = '';
+    document.getElementById('danger-bar').style.display = _cfg.spotlights ? '' : 'none';
 
     // Reset score display
     document.getElementById('scoreVal').textContent = '0';
@@ -3494,6 +3527,31 @@ initCustomizer();
 
 const TOTAL_STAGES = 12;
 const HEART_MAX = 5;
+
+// ─────────────────────────────────────────────
+// STAGE CONFIGURATION
+// ─────────────────────────────────────────────
+// Each stage unlocks one more gem type (matching necklace gem order),
+// then gradually introduces bomb enemy, spiky enemy, spotlights, and pearls.
+const STAGE_CONFIG = [
+    /* 1  Green Star   */ { itemTypes: ['gem'],                                                                                           enemyTypes: [],                           spotlights: false, pearlSpawn: false },
+    /* 2  Blue Sapph.  */ { itemTypes: ['gem', 'shard2'],                                                                                 enemyTypes: [],                           spotlights: false, pearlSpawn: false },
+    /* 3  Peach Drop   */ { itemTypes: ['gem', 'shard2', 'shard5'],                                                                       enemyTypes: ['pointDrainer1'],            spotlights: false, pearlSpawn: false },
+    /* 4  Garnet Hex   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1'],                                                             enemyTypes: ['pointDrainer1'],            spotlights: false, pearlSpawn: false },
+    /* 5  Aquamarine   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4'],                                                   enemyTypes: ['pointDrainer1', 'standard'],spotlights: false, pearlSpawn: false },
+    /* 6  Amethyst     */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1'],                                        enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: false },
+    /* 7  Blue Crystal */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3'],                              enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 8  Blue Heart   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6'],                    enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 9  Grn Marquise */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7'],          enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 10 Small Green  */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2'],                   enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 11 Red Orange   */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3'],        enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+    /* 12 Dark Pink    */ { itemTypes: ['gem', 'shard2', 'shard5', 'shard1', 'shard4', 'custom1', 'shard3', 'shard6', 'shard7', 'custom2', 'custom3', 'custom4'],enemyTypes: ['pointDrainer1', 'standard'],spotlights: true,  pearlSpawn: true  },
+];
+
+// Active stage settings — set in startGame(), used throughout update/spawn
+let stageItemTypes  = standardItems.slice();
+let stageEnemyTypes = ['standard', 'pointDrainer1'];
+let stagePearlSpawn = true;
 const HEART_REGEN_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // Persistent state
