@@ -1408,8 +1408,8 @@ let _lastFrameTime = 0;
 function update() {
     _fpsFrames++;
     const now = performance.now();
-    // dt = 1.0 at 120fps (8.33ms/frame), ~2.0 at 60fps, capped at 3 to avoid huge jumps
-    const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 8.33, 3) : 1;
+    // dt = 1.0 at 120fps (8.33ms/frame), ~2.0 at 60fps, ~4.0 at 30fps, ~6.0 at 20fps
+    const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 8.33, 7) : 1;
     _lastFrameTime = now;
     if (now - _fpsLast >= 1000) {
         _fpsDisplay = _fpsFrames;
@@ -2942,12 +2942,14 @@ function draw() {
         ctx.restore(); // camera
     } // end death / normal branch
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'overlay';
-    noisePattern.setTransform(new DOMMatrix().translateSelf(Math.random() * noiseSize, Math.random() * noiseSize));
-    ctx.fillStyle = noisePattern;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+    if (!IS_TOUCH) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'overlay';
+        noisePattern.setTransform(new DOMMatrix().translateSelf(Math.random() * noiseSize, Math.random() * noiseSize));
+        ctx.fillStyle = noisePattern;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+    }
 
     if (flashAlpha > 0) {
         ctx.fillStyle = `rgba(255,255,255,${flashAlpha})`;
@@ -2964,7 +2966,7 @@ function draw() {
         ctx.save();
 
         // Rays of light from edges — fine, iridescent, soft-edged
-        const rayCount = 64;
+        const rayCount = IS_TOUCH ? 24 : 64;
         const baseHue = (t * 20) % 360;
         ctx.globalCompositeOperation = 'screen';
 
