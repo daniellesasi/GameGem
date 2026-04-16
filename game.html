@@ -4192,8 +4192,12 @@ function renderNecklaceMap() {
         }
     });
 
-    // Draw gems
-    NECKLACE_GEMS.forEach((gem, i) => {
+    // Draw gems — render highest stage first (lowest z-order) so lower stage numbers
+    // sit on top and their click areas are never blocked by a higher stage's polygons.
+    let arrowSvg = ''; // collected separately so arrows always render above all gems
+    const gemOrder = NECKLACE_GEMS.map((gem, i) => i).reverse(); // 11→10→…→0
+    gemOrder.forEach(i => {
+        const gem = NECKLACE_GEMS[i];
         const stageNum = i + 1;
         const completed = stageNum < currentStage;
         const isCurrent = stageNum === currentStage;
@@ -4205,21 +4209,19 @@ function renderNecklaceMap() {
 
         svg += `<g class="gem-node${currentClass}"${stageAttr}>`;
 
-        // Invisible tap target for mobile (padded bounding rect)
+        // Invisible tap target for mobile — tight padding to avoid cross-gem overlap
         if (unlocked) {
             const b = getGemBounds(gem);
-            const pad = 20;
+            const pad = 8;
             svg += `<rect x="${b.minX - pad}" y="${b.minY - pad}" width="${b.maxX - b.minX + pad*2}" height="${b.maxY - b.minY + pad*2}" fill="rgba(0,0,0,0.001)"/>`;
         }
 
         if (gem.polygons) {
             if (isLocked) {
-                // Wireframe: black fill with white strokes
                 gem.polygons.forEach(poly => {
                     svg += `<polygon points="${nmPts(poly.pts)}" fill="black" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>`;
                 });
             } else {
-                // Full color
                 gem.polygons.forEach(poly => {
                     svg += `<polygon points="${nmPts(poly.pts)}" fill="${poly.fill}"/>`;
                 });
@@ -4237,7 +4239,7 @@ function renderNecklaceMap() {
             }
         }
 
-        // Stage number label (always shown, except on locked stages)
+        // Stage number label
         {
             const b = getGemBounds(gem);
             const lx = b.cx, ly = b.maxY + 11;
@@ -4261,15 +4263,17 @@ function renderNecklaceMap() {
 
         svg += `</g>`;
 
-        // Current stage arrow indicator
+        // Collect arrow — rendered after all gems so it's always visible
         if (isCurrent) {
             const b = getGemBounds(gem);
             const ax = b.cx, ay = b.minY - 14;
-            svg += `<polygon points="${ax},${ay + 10} ${ax - 6},${ay} ${ax + 6},${ay}" fill="white">`;
-            svg += `<animateTransform attributeName="transform" type="translate" values="0,0;0,-5;0,0" dur="1s" repeatCount="indefinite"/>`;
-            svg += `</polygon>`;
+            arrowSvg += `<polygon points="${ax},${ay + 10} ${ax - 6},${ay} ${ax + 6},${ay}" fill="white">`;
+            arrowSvg += `<animateTransform attributeName="transform" type="translate" values="0,0;0,-5;0,0" dur="1s" repeatCount="indefinite"/>`;
+            arrowSvg += `</polygon>`;
         }
     });
+
+    svg += arrowSvg; // arrows always on top
 
     // Water reflection at bottom
     svg += `<defs>`;
