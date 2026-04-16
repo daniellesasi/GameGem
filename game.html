@@ -2958,7 +2958,7 @@ function draw() {
             const _LP = {
                 1: { idle: { cy: 25.5, size: 53  }, open: { cy: 37.9, size: 125 } },
                 2: { idle: { cy: 25.0, size: 102 }, open: { cy: 36.5, size: 130 } },
-                3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 27.0, size: 85 }, open: { cy: 37.9, size: 123 } },
+                3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 13.5, size: 132 }, open: { cy: 37.9, size: 123 } },
             };
             const _lp  = _LP[lt] || _LP[1];
             const idleA = Math.max(0, 1 - m * 3.5);
@@ -3567,7 +3567,7 @@ function renderPreviewFace(canvas) {
     const _LP2 = {
         1: { idle: { cy: 25.5, size: 53  } },
         2: { idle: { cy: 25.0, size: 102 } },
-        3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 27.0, size: 85 } },
+        3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 13.5, size: 132 } },
     };
     const _lp2 = _LP2[lt] || _LP2[1];
     const idleImg = lt === 2 ? lip2Idle : lt === 3 ? lip3Idle1 : lip1Idle;
