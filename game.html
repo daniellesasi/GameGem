@@ -13,11 +13,12 @@
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            overflow: hidden; background: #050505; touch-action: none;
+            overflow: hidden; background: #020202; touch-action: none;
             -webkit-user-select: none; user-select: none;
             font-family: 'Anton', sans-serif;
         }
         canvas { display: block; position: fixed; inset: 0; }
+        #gameCanvas { filter: contrast(1.12) saturate(1.35); }
 
         #score-container {
             position: fixed;
@@ -2294,13 +2295,13 @@ function drawBlob(ctx, x, y, radius, wobblePhase, complexity = 5, irregularity =
 // DRAW
 // ─────────────────────────────────────────────
 function draw() {
-    ctx.fillStyle = '#050505';
+    ctx.fillStyle = '#020202';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Stage 1 — Green Star: subtle ambient tint + edge bloom
     if (playingStage === 1) {
-        // Flat colour wash — just a breath of green over the black
-        ctx.fillStyle = 'rgba(60, 185, 110, 0.055)';
+        // Flat colour wash
+        ctx.fillStyle = 'rgba(60, 185, 110, 0.08)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         // Soft green bloom pooling at the edges (gradient cached; rebuilt only on resize)
         if (!_stage1BgGrad) {
@@ -2309,7 +2310,7 @@ function draw() {
                 canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.92
             );
             _stage1BgGrad.addColorStop(0, 'rgba(0,0,0,0)');
-            _stage1BgGrad.addColorStop(1, 'rgba(60,185,110,0.11)');
+            _stage1BgGrad.addColorStop(1, 'rgba(60,185,110,0.18)');
         }
         ctx.fillStyle = _stage1BgGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
