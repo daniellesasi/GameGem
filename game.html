@@ -793,9 +793,11 @@ const entityCtx    = entityCanvas.getContext('2d');
 const lightCanvas  = document.createElement('canvas');
 const lightCtx     = lightCanvas.getContext('2d');
 
+let _stage1BgGrad = null;
 function resizeCanvas() {
     canvas.width = entityCanvas.width = lightCanvas.width  = window.innerWidth;
     canvas.height = entityCanvas.height = lightCanvas.height = window.innerHeight;
+    _stage1BgGrad = null; // invalidate cached gradient on resize
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
@@ -1349,8 +1351,9 @@ function sdPoly(px, py, vertices) {
     }
     return Math.sqrt(d) * s;
 }
+let _sdfWobble = 0; // pre-computed once per frame before SDF loop
 function getSceneSDF(px, py) {
-    let d = Math.sqrt((px-player.x)**2 + (py-player.y)**2) - (player.baseR + player.wobble + Math.sin(player.anim.time*4)*2);
+    let d = Math.sqrt((px-player.x)**2 + (py-player.y)**2) - _sdfWobble;
     const cheekSize = (coveragePercent > 50 ? 30 : 0) + player.anim.puff * 40;
     if (cheekSize > 0) {
         d = smin(d, Math.sqrt((px-(player.x-60))**2 + (py-player.y)**2) - (player.baseR*0.8+cheekSize), 40);
@@ -2273,17 +2276,17 @@ function draw() {
 
     // Stage 1 — Green Star: subtle ambient tint + edge bloom
     if (playingStage === 1) {
-        // Flat colour wash — just a breath of green over the black
         ctx.fillStyle = 'rgba(60, 185, 110, 0.055)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Soft green bloom pooling at the edges
-        const _sg1 = ctx.createRadialGradient(
-            canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.22,
-            canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.92
-        );
-        _sg1.addColorStop(0, 'rgba(0,0,0,0)');
-        _sg1.addColorStop(1, 'rgba(60,185,110,0.11)');
-        ctx.fillStyle = _sg1;
+        if (!_stage1BgGrad) {
+            _stage1BgGrad = ctx.createRadialGradient(
+                canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.22,
+                canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.92
+            );
+            _stage1BgGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            _stage1BgGrad.addColorStop(1, 'rgba(60,185,110,0.11)');
+        }
+        ctx.fillStyle = _stage1BgGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -2323,9 +2326,10 @@ function draw() {
         b.polygon = v;
     });
 
+    _sdfWobble = player.baseR + player.wobble + Math.sin(player.anim.time * 4) * 2;
     const pts = [];
-    const RAY_COUNT = IS_TOUCH ? 60 : 150;
-    const SDF_STEPS = IS_TOUCH ? 10 : 25;
+    const RAY_COUNT = IS_TOUCH ? 36 : 150;
+    const SDF_STEPS = IS_TOUCH ? 6  : 25;
     for (let i = 0; i <= RAY_COUNT; i++) {
         const a = (i/RAY_COUNT)*Math.PI*2, dx = Math.cos(a), dy = Math.sin(a);
         let dist = 10;
@@ -2596,14 +2600,12 @@ function draw() {
         if (_entA > 0) { ctx.globalAlpha = _entA; ctx.drawImage(entityCanvas, 0, 0); ctx.globalAlpha = 1; }
     }
 
-    // Pearl glares drawn on main ctx in screen space — after entityCanvas, so they render on top
-    if (winPhase === 0) {
+    // Pearl glares — skip on mobile (each call creates 24+ gradients)
+    if (winPhase === 0 && !IS_TOUCH) {
         items.forEach(it => {
             if (!it.active || it.type !== 'pearl') return;
-            // Convert world → screen
             const sx = (it.x - camera.x) * camera.zoom + canvas.width  / 2;
             const sy = (it.y - camera.y) * camera.zoom + canvas.height / 2;
-            // Midpoint between actual pearl size and previous oversized version
             const sr = it.w * 0.42 * camera.zoom * 2.2;
             drawPearlGlare(ctx, sx, sy, sr, player.anim.time);
         });
@@ -2636,19 +2638,24 @@ function draw() {
 
         let grad;
         if (spotlightDanger) {
-            // Each spotlight gets a unique red shade — same sharp flat style as normal
-            const _g = Math.floor((spot.orbitR * 0.11 + 8)  % 70);   // green 8–78  (darker = redder)
-            const _b = Math.floor((spot.orbitR * 0.04 + 0)  % 30);   // blue  0–30  (slight warmth variation)
+            // Danger: flicker alpha changes every frame — must recreate
+            const _g = Math.floor((spot.orbitR * 0.11 + 8)  % 70);
+            const _b = Math.floor((spot.orbitR * 0.04 + 0)  % 30);
             const _col = `255,${_g},${_b}`;
             grad = lightCtx.createRadialGradient(0,0, sr*0.85, 0,0, sr);
             grad.addColorStop(0,   `rgba(${_col},${0.3 * _flicker})`);
             grad.addColorStop(0.9, `rgba(${_col},${0.3 * _flicker})`);
             grad.addColorStop(1,   `rgba(${_col},0)`);
+            spot._gradCache = null; // invalidate normal cache when exiting danger
         } else {
-            grad = lightCtx.createRadialGradient(0,0,sr*0.85, 0,0,sr);
-            grad.addColorStop(0,   `rgba(${spot.color},0.3)`);
-            grad.addColorStop(0.9, `rgba(${spot.color},0.3)`);
-            grad.addColorStop(1,   `rgba(${spot.color},0)`);
+            // Normal: sr and color are constant — cache the gradient
+            if (!spot._gradCache) {
+                spot._gradCache = lightCtx.createRadialGradient(0,0,sr*0.85, 0,0,sr);
+                spot._gradCache.addColorStop(0,   `rgba(${spot.color},0.3)`);
+                spot._gradCache.addColorStop(0.9, `rgba(${spot.color},0.3)`);
+                spot._gradCache.addColorStop(1,   `rgba(${spot.color},0)`);
+            }
+            grad = spot._gradCache;
         }
 
         lightCtx.fillStyle = grad;
