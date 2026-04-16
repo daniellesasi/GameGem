@@ -3016,11 +3016,10 @@ function draw() {
                 }
             }
 
-            // Open frame — size is dynamic (grows with coverage), Y is per-lip-type
+            // Open frame — starts at exported open.size, grows slightly with coverage
             if (openA > 0.01 && openImg.complete && openImg.naturalWidth > 0) {
                 const gi = coveragePercent / 100;
-                const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (80 + gi * 22) * fs;
-                const openS = baseOpen + player.anim.gulp * 14 * fs;
+                const openS = (_lp.open.size + gi * 25 + player.anim.gulp * 14) * fs;
                 const wobble = m > 0.5 ? Math.sin(player.anim.time * 25) * 0.04 : 0;
                 const openW  = openS * (1 - wobble);
                 const openH  = openS * (1 + wobble);
