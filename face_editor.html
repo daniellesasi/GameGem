@@ -216,15 +216,16 @@ hr { border: none; border-top: 1px solid #222; }
 
     <div id="blendSection" class="section">
         <h3>Gem Blend Mode Tester</h3>
+        <div style="font-size:10px;color:#555;margin-bottom:4px">Character with swallowed gems · body skin painted on top · test blend mode + opacity of skin layer</div>
         <canvas id="blendCanvas" width="400" height="400"></canvas>
         <div class="blend-controls">
-            <span class="blend-badge">Mode</span>
+            <span class="blend-badge">Skin blend mode</span>
             <select id="blendModeSelect">
                 <option value="normal">normal</option>
-                <option value="screen" selected>screen</option>
+                <option value="screen">screen</option>
                 <option value="overlay">overlay</option>
                 <option value="hard-light">hard-light</option>
-                <option value="soft-light">soft-light</option>
+                <option value="soft-light" selected>soft-light</option>
                 <option value="multiply">multiply</option>
                 <option value="color-dodge">color-dodge</option>
                 <option value="color-burn">color-burn</option>
@@ -239,14 +240,9 @@ hr { border: none; border-top: 1px solid #222; }
             </select>
         </div>
         <div class="blend-controls">
-            <span class="blend-badge">Gem Opacity</span>
-            <input type="range" id="blendOpacity" min="0" max="1" step="0.01" value="0.75" style="flex:1">
-            <input class="val" id="blendOpacityVal" type="number" min="0" max="1" step="0.01" value="0.75">
-        </div>
-        <div class="blend-controls">
-            <span class="blend-badge">Body Opacity</span>
-            <input type="range" id="bodyOpacity" min="0" max="1" step="0.01" value="1" style="flex:1">
-            <input class="val" id="bodyOpacityVal" type="number" min="0" max="1" step="0.01" value="1">
+            <span class="blend-badge">Skin opacity</span>
+            <input type="range" id="bodyOpacity" min="0" max="1" step="0.01" value="0.85" style="flex:1">
+            <input class="val" id="bodyOpacityVal" type="number" min="0" max="1" step="0.01" value="0.85">
         </div>
     </div>
 </div>
@@ -732,52 +728,47 @@ function lightenHex(hex, pct) {
 }
 
 // ─── BLEND TESTER ─────────────────────────────────────────
-// Draw a gem polygon given a set of points (normalised -1..1), fill with gradient
-function drawGem(c, cx, cy, size, pts, colTop, colBot) {
+// Draws a gem polygon (pts = normalised -1..1) centred at (cx,cy) in game units
+function drawBlendGem(c, cx, cy, size, pts, colTop, colBot) {
     const scaled = pts.map(([px, py]) => [cx + px * size, cy + py * size]);
     const grad = c.createLinearGradient(cx, cy - size, cx, cy + size);
     grad.addColorStop(0, colTop);
+    grad.addColorStop(0.45, colTop);
     grad.addColorStop(1, colBot);
     c.beginPath();
     scaled.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
     c.closePath();
-    c.fillStyle = grad;
-    c.fill();
-    // Facet highlight
+    c.fillStyle = grad; c.fill();
+    // White facet edges
     c.beginPath();
     scaled.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
     c.closePath();
-    c.strokeStyle = 'rgba(255,255,255,0.35)';
-    c.lineWidth = 1.2;
-    c.stroke();
-    // Top sparkle
-    const hPts = scaled.slice(0, Math.ceil(scaled.length / 2));
+    c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 0.8; c.stroke();
+    // Top-half highlight
+    const top = scaled.slice(0, Math.ceil(scaled.length / 2));
     c.beginPath();
-    hPts.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
+    top.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
     c.closePath();
-    c.fillStyle = 'rgba(255,255,255,0.18)';
-    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.22)'; c.fill();
 }
 
-// Gem shape templates (normalised coords, -1..1 bounding box)
-const GEM_SHAPES = {
-    diamond:   [[ 0,-1],[0.6,-0.2],[0.35, 1],[-0.35, 1],[-0.6,-0.2]],
-    hexagon:   [[ 0,-1],[0.87,-0.5],[0.87,0.5],[ 0, 1],[-0.87,0.5],[-0.87,-0.5]],
-    marquise:  [[ 0,-1],[0.75,-0.25],[1, 0],[0.75,0.25],[0,-1],[-0.75,0.25],[-1,0],[-0.75,-0.25]],
-    teardrop:  [[ 0,-1],[0.65,-0.3],[0.55,0.4],[0, 1],[-0.55,0.4],[-0.65,-0.3]],
-    shield:    [[ 0,-1],[0.85,-0.3],[0.85, 0.4],[0, 1],[-0.85, 0.4],[-0.85,-0.3]],
+const _GEM_SHAPES = {
+    diamond:  [[ 0,-1],[0.55,-0.15],[0.3, 1],[-0.3, 1],[-0.55,-0.15]],
+    hexagon:  [[ 0,-1],[0.87,-0.5],[0.87,0.5],[ 0, 1],[-0.87,0.5],[-0.87,-0.5]],
+    teardrop: [[ 0,-1],[0.65,-0.3],[0.55,0.4],[0, 1],[-0.55,0.4],[-0.65,-0.3]],
+    shield:   [[ 0,-1],[0.85,-0.25],[0.7,0.7],[0,1],[-0.7,0.7],[-0.85,-0.25]],
+    oval:     [[ 0,-1],[0.7,-0.7],[1,0],[0.7,0.7],[0,1],[-0.7,0.7],[-1,0],[-0.7,-0.7]],
 };
 
-// Fixed gem layout: [shape, x, y, size, colTop, colBot]
-const GEM_LAYOUT = [
-    ['diamond',  -85, -90, 28, '#a0ffa0', '#1a8c1a'],   // green top-left
-    ['hexagon',   80, -85, 24, '#80cfff', '#1a4aaa'],   // blue top-right
-    ['teardrop',   0, -110, 20, '#ffb0ff', '#aa1aaa'],   // pink top-centre
-    ['shield',   -95,  10, 22, '#ffd080', '#aa6600'],   // gold mid-left
-    ['marquise',  90,  15, 20, '#ff9090', '#aa1a1a'],   // red mid-right
-    ['diamond',  -50,  80, 18, '#c0ffd0', '#1a7a4a'],   // green bottom-left
-    ['hexagon',   50,  75, 18, '#b0b0ff', '#3030aa'],   // purple bottom-right
-    ['teardrop',   0,  95, 16, '#ffe0a0', '#aa7700'],   // amber bottom-centre
+// Gem slots matching the in-game SLOTS (game-unit coords, relDist ≈ 75-80)
+// [shape, angle_rad, dist, size_gu, colTop, colBot]
+const _BLEND_GEMS = [
+    ['diamond',  -Math.PI*0.65, 78, 20, '#a0ffa0', '#187a18'],  // headLeft  – green
+    ['hexagon',  -Math.PI*0.35, 78, 20, '#80cfff', '#1a4aaa'],  // headRight – blue
+    ['teardrop',  Math.PI*1.1,  78, 18, '#ffb0ff', '#99119e'],  // leftArm   – pink
+    ['shield',    Math.PI*1.9,  78, 18, '#ffd080', '#aa6600'],  // rightArm  – gold
+    ['oval',      Math.PI*0.7,  72, 16, '#ff9898', '#aa1a1a'],  // leftLeg   – red
+    ['diamond',   Math.PI*0.3,  72, 16, '#c0b8ff', '#3828bb'],  // rightLeg  – purple
 ];
 
 function drawBlendTest() {
@@ -789,127 +780,121 @@ function drawBlendTest() {
     bc.style.width  = CSS + 'px';
     bc.style.height = CSS + 'px';
 
-    const c   = bc.getContext('2d');
+    const c  = bc.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, CSS, CSS);
 
-    const mode   = document.getElementById('blendModeSelect').value;
-    const gemAlpha  = parseFloat(document.getElementById('blendOpacity').value);
+    const mode      = document.getElementById('blendModeSelect').value;
     const bodyAlpha = parseFloat(document.getElementById('bodyOpacity').value);
 
     const cx = CSS / 2, cy = CSS / 2;
-    const r  = CSS / 2 - 8;
+    const r  = CSS / 2 - 10;
+    const sc = r / GAME_R;   // canvas px per game unit
 
-    // ── 1. Background (dark, so blend modes are visible) ──
-    c.fillStyle = '#0d0d0d';
-    c.fillRect(0, 0, CSS, CSS);
+    // ── Background ────────────────────────────────────────
+    c.fillStyle = '#111'; c.fillRect(0, 0, CSS, CSS);
 
-    // ── 2. Body layer (character blob) ──
-    c.save();
-    c.globalAlpha = bodyAlpha;
-    const bodyGrad = c.createRadialGradient(cx - r*0.3, cy - r*0.3, r*0.1, cx, cy, r);
-    bodyGrad.addColorStop(0, lightenHex(P.color, 0.3));
-    bodyGrad.addColorStop(0.6, P.color);
-    bodyGrad.addColorStop(1, darkenHex(P.color, 0.25));
-    c.fillStyle = bodyGrad;
-    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI*2); c.fill();
-    // Specular
-    const shine = c.createRadialGradient(cx - r*0.35, cy - r*0.38, 0, cx - r*0.1, cy - r*0.15, r*0.55);
-    shine.addColorStop(0, 'rgba(255,255,255,0.45)');
-    shine.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = shine; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI*2); c.fill();
-    c.restore();
-
-    // ── 3. Gems layer (drawn with selected blend mode) ──
-    c.save();
-    c.globalCompositeOperation = mode;
-    c.globalAlpha = gemAlpha;
-    GEM_LAYOUT.forEach(([shape, gx, gy, sz, ct, cb]) => {
-        const pts = GEM_SHAPES[shape];
-        if (pts) drawGem(c, cx + gx, cy + gy, sz, pts, ct, cb);
-    });
-    c.restore();
-
-    // ── 4. Face overlay (normal mode, drawn on top) ──
+    // ── Work in game-unit space ────────────────────────────
     c.save();
     c.translate(cx, cy);
-    const sc  = r / GAME_R;
     c.scale(sc, sc);
+    // Clip everything to body circle
     c.beginPath(); c.arc(0, 0, GAME_R, 0, Math.PI*2); c.clip();
 
-    const fs  = P.fs;
-    const ep  = eP();
+    // ── 1. Gems (drawn first, fully opaque, inside the body) ─
+    _BLEND_GEMS.forEach(([shape, angle, dist, sz, ct, cb]) => {
+        const gx = Math.cos(angle) * dist;
+        const gy = Math.sin(angle) * dist;
+        drawBlendGem(c, gx, gy, sz, _GEM_SHAPES[shape], ct, cb);
+    });
+
+    // ── 2. Skin / body fill ON TOP of gems ────────────────
+    // This is the layer whose blend mode + opacity we're testing
+    c.save();
+    c.globalCompositeOperation = mode;
+    c.globalAlpha = bodyAlpha;
+    const bg = c.createRadialGradient(-GAME_R*0.28, -GAME_R*0.28, GAME_R*0.08, 0, 0, GAME_R);
+    bg.addColorStop(0, lightenHex(P.color, 0.32));
+    bg.addColorStop(0.55, P.color);
+    bg.addColorStop(1, darkenHex(P.color, 0.28));
+    c.fillStyle = bg;
+    c.beginPath(); c.arc(0, 0, GAME_R, 0, Math.PI*2); c.fill();
+    c.restore();
+
+    // ── 3. Specular highlight (normal mode, always on top) ──
+    c.save();
+    const sh = c.createRadialGradient(-GAME_R*0.33, -GAME_R*0.36, 0, -GAME_R*0.08, -GAME_R*0.13, GAME_R*0.52);
+    sh.addColorStop(0, 'rgba(255,255,255,0.5)');
+    sh.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = sh;
+    c.beginPath(); c.arc(0, 0, GAME_R, 0, Math.PI*2); c.fill();
+    c.restore();
+
+    // ── 4. Face (eyes + mouth, normal mode) ────────────────
+    const fs     = P.fs;
+    const ep     = eP();
     const eyeSpc = ep.eyeSpacing * fs;
     const eyeY_  = ep.eyeY * fs;
     const eyeR_  = ep.eyeR * fs;
-    const et = P.eyeType;
+    const et     = P.eyeType;
 
     if (et === 0) {
-        [-1, 1].forEach(side => {
-            c.save(); c.translate(side * eyeSpc, eyeY_);
-            c.beginPath(); c.arc(0, 0, eyeR_, 0, Math.PI*2);
-            c.fillStyle = '#fff'; c.fill(); c.clip();
-            c.fillStyle = '#1a1a1a'; c.beginPath(); c.arc(0, 0, eyeR_*0.9, 0, Math.PI*2); c.fill();
-            c.fillStyle = '#fff';
-            c.beginPath(); c.arc(-eyeR_*0.4, -eyeR_*0.4, eyeR_*0.35, 0, Math.PI*2); c.fill();
-            c.beginPath(); c.arc(-eyeR_*0.1, -eyeR_*0.6, eyeR_*0.15, 0, Math.PI*2); c.fill();
+        [-1,1].forEach(side => {
+            c.save(); c.translate(side*eyeSpc, eyeY_);
+            c.beginPath(); c.arc(0,0,eyeR_,0,Math.PI*2);
+            c.fillStyle='#fff'; c.fill(); c.clip();
+            c.fillStyle='#1a1a1a'; c.beginPath(); c.arc(0,0,eyeR_*0.9,0,Math.PI*2); c.fill();
+            c.fillStyle='#fff';
+            c.beginPath(); c.arc(-eyeR_*0.4,-eyeR_*0.4,eyeR_*0.35,0,Math.PI*2); c.fill();
+            c.beginPath(); c.arc(-eyeR_*0.1,-eyeR_*0.6,eyeR_*0.15,0,Math.PI*2); c.fill();
             c.restore();
         });
     } else if (et === 6) {
-        [-1, 1].forEach(side => {
-            c.save(); c.translate(side * eyeSpc, eyeY_);
-            c.beginPath(); c.ellipse(0, 0, eyeR_, eyeR_*1.227, 0, 0, Math.PI*2);
-            c.fillStyle = '#fff'; c.fill(); c.clip();
-            c.fillStyle = '#1a1a1a';
-            c.beginPath(); c.ellipse(0, eyeR_*0.219, eyeR_*0.927, eyeR_*1.028, 0, 0, Math.PI*2); c.fill();
-            c.fillStyle = '#fff';
-            c.beginPath(); c.arc(eyeR_*0.353, -eyeR_*0.491, eyeR_*0.174, 0, Math.PI*2); c.fill();
-            c.beginPath(); c.arc(eyeR_*0.564, eyeR_*0.004, eyeR_*0.290, 0, Math.PI*2); c.fill();
+        [-1,1].forEach(side => {
+            c.save(); c.translate(side*eyeSpc, eyeY_);
+            c.beginPath(); c.ellipse(0,0,eyeR_,eyeR_*1.227,0,0,Math.PI*2);
+            c.fillStyle='#fff'; c.fill(); c.clip();
+            c.fillStyle='#1a1a1a';
+            c.beginPath(); c.ellipse(0,eyeR_*0.219,eyeR_*0.927,eyeR_*1.028,0,0,Math.PI*2); c.fill();
+            c.fillStyle='#fff';
+            c.beginPath(); c.arc(eyeR_*0.353,-eyeR_*0.491,eyeR_*0.174,0,Math.PI*2); c.fill();
+            c.beginPath(); c.arc(eyeR_*0.564,eyeR_*0.004,eyeR_*0.290,0,Math.PI*2); c.fill();
             c.restore();
         });
     } else if (et === 7) {
         const img = imgs['eye2Idle'];
         if (img && img.complete && img.naturalWidth > 0) {
             const eyeW = eyeSpc * ep.eyeWidthMult * fs;
-            const vc = ep.eyeVCenter;
-            c.drawImage(img, -eyeW/2, eyeY_ - eyeW * vc, eyeW, eyeW);
+            c.drawImage(img, -eyeW/2, eyeY_ - eyeW*ep.eyeVCenter, eyeW, eyeW);
         }
     } else {
         const img = custEyeImgs[et];
-        const aspect = custEyeAspect[et] || 1;
-        const vc = ep.eyeVCenter;
         if (img && img.complete && img.naturalWidth > 0) {
             const eyeW = eyeSpc * ep.eyeWidthMult * fs;
-            const eyeH = eyeW * aspect;
-            c.drawImage(img, -eyeW/2, eyeY_ - eyeH * vc, eyeW, eyeH);
+            const eyeH = eyeW * (custEyeAspect[et] || 1);
+            c.drawImage(img, -eyeW/2, eyeY_ - eyeH*ep.eyeVCenter, eyeW, eyeH);
         }
     }
 
     const mY_   = mY() * fs;
     const mSiz_ = mSiz() * fs;
-    const lt    = P.lipType;
-    const ms    = P.mouthState;
+    const lt = P.lipType, ms = P.mouthState;
     let lipImg;
-    if (lt === 1) lipImg = ms === 'open' ? imgs['lip1Open'] : imgs['lip1Idle'];
-    else if (lt === 2) lipImg = ms === 'open' ? imgs['lip2Open'] : imgs['lip2Idle'];
-    else if (lt === 3) {
-        if (ms === 'open')  lipImg = imgs['lip3Open'];
-        else if (ms === 'idle2') lipImg = imgs['lip3Idle2'];
-        else lipImg = imgs['lip3Idle1'];
-    }
-    if (lipImg && lipImg.complete && lipImg.naturalWidth > 0) {
+    if      (lt===1) lipImg = ms==='open' ? imgs['lip1Open'] : imgs['lip1Idle'];
+    else if (lt===2) lipImg = ms==='open' ? imgs['lip2Open'] : imgs['lip2Idle'];
+    else if (lt===3) lipImg = ms==='open' ? imgs['lip3Open'] : ms==='idle2' ? imgs['lip3Idle2'] : imgs['lip3Idle1'];
+    if (lipImg && lipImg.complete && lipImg.naturalWidth > 0)
         c.drawImage(lipImg, -mSiz_/2, mY_ - mSiz_*0.5, mSiz_, mSiz_);
-    }
-    c.restore();
+
+    c.restore(); // end scale+translate
 }
 
 // Wire up blend tester controls
 document.getElementById('blendModeSelect').addEventListener('change', drawBlendTest);
-
-['blendOpacity', 'bodyOpacity'].forEach(id => {
+['bodyOpacity'].forEach(id => {
     const slider = document.getElementById(id);
     const valBox = document.getElementById(id + 'Val');
-    slider.addEventListener('input', () => { valBox.value = slider.value; drawBlendTest(); });
+    slider.addEventListener('input', () => { valBox.value = parseFloat(slider.value).toFixed(2); drawBlendTest(); });
     valBox.addEventListener('input', () => { slider.value = valBox.value; drawBlendTest(); });
 });
 
