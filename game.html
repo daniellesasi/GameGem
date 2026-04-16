@@ -3515,7 +3515,8 @@ function switchTab(tabIndex) {
 }
 
 // Draws the character face on a canvas using the exact same coordinates as the game.
-// Guarantees the preview looks identical to the in-game starting character.
+// Uses ctx.scale(r/80) so all drawing uses game-exact fs=1.1 coordinates —
+// guarantees pixel-perfect proportional match at any canvas size.
 function renderPreviewFace(canvas) {
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
@@ -3528,21 +3529,22 @@ function renderPreviewFace(canvas) {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, css, css);
 
-    const r  = css / 2;          // preview radius in CSS px
-    const scale = r / 80;        // game baseR = 80
-    const fs = 1.1 * scale;      // game fs at start (0% coverage)
+    const r  = css / 2;
+    const sc = r / 80;   // scale from game space (baseR=80) to canvas space
 
     c.save();
-    c.translate(r, r);           // origin = face centre
+    c.translate(r, r);   // face centre
+    c.scale(sc, sc);     // everything drawn below is in game-exact pixel coordinates
 
-    // ── Eyes ──
+    // Game constants at game-start (coveragePercent=0, puff=0)
+    const fs     = 1.1;
     const eyeSpc = 40 * fs;
     const eyeY   = -31 * fs;
     const eyeR   = 36 * fs;
 
     const et = window.PLAYER_EYE_TYPE;
     if (et === 7) {
-        // EYE2 PNG — exact same draw call as in-game
+        // EYE2 PNG — identical draw call to in-game
         if (eye2Idle.complete && eye2Idle.naturalWidth > 0) {
             if (window._eye2HueFilter && window._eye2HueFilter !== 'none') c.filter = window._eye2HueFilter;
             const eyeW = eyeSpc * 1.7 * fs;
@@ -3550,7 +3552,6 @@ function renderPreviewFace(canvas) {
             c.filter = 'none';
         }
     } else if (et === 6) {
-        // Manga colored eyes
         [-1, 1].forEach(side => {
             c.save(); c.translate(side * eyeSpc, eyeY);
             c.beginPath(); c.ellipse(0, 0, eyeR, eyeR * 1.227, 0, 0, Math.PI * 2);
@@ -3563,7 +3564,6 @@ function renderPreviewFace(canvas) {
             c.restore();
         });
     } else if (et === 0) {
-        // Procedural eyes
         [-1, 1].forEach(side => {
             c.save(); c.translate(side * eyeSpc, eyeY);
             c.beginPath(); c.arc(0, 0, eyeR, 0, Math.PI * 2);
@@ -3591,7 +3591,6 @@ function renderPreviewFace(canvas) {
         const idleS = 85 * fs;
         c.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
     } else if (idleImg && !idleImg.complete) {
-        // Image still loading — retry once it's ready
         idleImg.onload = () => renderPreviewFace(canvas);
     }
 
