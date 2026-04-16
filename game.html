@@ -3491,8 +3491,8 @@ function startGame() {
     stageEnemyTypes = _cfg.enemyTypes.slice();
     stagePearlSpawn = _cfg.pearlSpawn;
 
-    // Re-seed items using only the stage's allowed gem types
-    const _itemCount = _cfg.itemCount || 25;
+    // Re-seed items — cap at 25 on mobile to keep 60fps
+    const _itemCount = IS_TOUCH ? Math.min(_cfg.itemCount || 25, 25) : (_cfg.itemCount || 25);
     items.length = 0;
     for (let i = 0; i < _itemCount; i++) items.push(spawn(i > 5));
     // Guarantee at least one of each unlocked type near the player
