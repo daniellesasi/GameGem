@@ -1417,8 +1417,9 @@ let _lastFrameTime = 0;
 function update() {
     _fpsFrames++;
     const now = performance.now();
-    // dt = 1.0 at 120fps (8.33ms/frame), ~2.0 at 60fps, capped at 3 on desktop / 7 on mobile
-    const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 8.33, IS_TOUCH ? 7 : 3) : 1;
+    // dt = 1.0 at 60fps (16.67ms/frame), 0.5 at 120fps, 2.0 at 30fps — calibrated to 60fps so
+    // physics feel consistent across devices. Caps prevent huge jumps on tab-switch.
+    const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 16.67, IS_TOUCH ? 3 : 1.5) : 1;
     _lastFrameTime = now;
     if (now - _fpsLast >= 1000) {
         _fpsDisplay = _fpsFrames;
