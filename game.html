@@ -2969,7 +2969,7 @@ function draw() {
         } else {
             const eyeImg = custEyeImages[window.PLAYER_EYE_TYPE];
             if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
-                const eyeW = eyeSpc * 4.5 * fs;
+                const eyeW = eyeSpc * 1.7 * fs;
                 const eyeH = eyeW * custEyeAspect[window.PLAYER_EYE_TYPE];
                 ctx.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * custEyeVCenter[window.PLAYER_EYE_TYPE], eyeW, eyeH);
             } else {
@@ -3530,7 +3530,7 @@ function renderPreviewFace(canvas) {
     c.clearRect(0, 0, css, css);
 
     const r  = css / 2;
-    const sc = r / 80;   // scale from game space (baseR=80) to canvas space
+    const sc = r / 110;  // scale from game space (player.baseR=110) to canvas space
 
     c.save();
     c.translate(r, r);   // face centre
@@ -3577,7 +3577,7 @@ function renderPreviewFace(canvas) {
     } else {
         const eyeImg = custEyeImages[et];
         if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
-            const eyeW = eyeSpc * 4.5 * fs;
+            const eyeW = eyeSpc * 1.7 * fs;
             const eyeH = eyeW * custEyeAspect[et];
             c.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * custEyeVCenter[et], eyeW, eyeH);
         }

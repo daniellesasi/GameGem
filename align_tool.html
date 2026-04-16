@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Face Alignment Tool</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #111; color: #eee; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+
+.preview-pane {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: #0d0d0d;
+}
+.preview-pane canvas { border-radius: 50%; box-shadow: 0 0 40px rgba(0,0,0,0.6); }
+.hint { font-size: 11px; color: #555; text-align: center; line-height: 1.6; }
+
+.controls {
+    width: 340px; padding: 16px; overflow-y: auto;
+    background: #181818; border-left: 1px solid #2a2a2a;
+    display: flex; flex-direction: column; gap: 4px;
+}
+
+h2 { font-size: 13px; color: #888; margin: 12px 0 6px; border-top: 1px solid #2a2a2a; padding-top: 10px; }
+h2:first-child { margin-top: 0; border-top: none; }
+
+.row { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+.row-label { display: flex; justify-content: space-between; font-size: 11px; color: #aaa; }
+.row-label span.val { color: #7df; font-weight: bold; }
+input[type=range] { width: 100%; accent-color: #7df; height: 4px; cursor: pointer; }
+
+.color-row { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.color-row input[type=color] { border: none; background: none; width: 40px; height: 28px; cursor: pointer; padding: 0; }
+
+.btn { background: #2a3a4a; color: #7df; border: 1px solid #3a5a7a; padding: 8px 12px;
+       font-family: monospace; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; border-radius: 4px; }
+.btn:hover { background: #3a4a5a; }
+.btn.success { background: #1a3a1a; border-color: #3a7a3a; color: #7f7; }
+
+.output {
+    background: #0a0f0a; border: 1px solid #2a3a2a; padding: 10px;
+    font-size: 10px; color: #5f5; line-height: 1.7; border-radius: 4px;
+    margin-top: 8px; white-space: pre; overflow-x: auto;
+}
+
+.toggle-row { display: flex; gap: 8px; margin: 6px 0; }
+.toggle { flex: 1; padding: 5px; font-size: 11px; font-family: monospace;
+          background: #222; border: 1px solid #444; color: #aaa; cursor: pointer; border-radius: 3px; }
+.toggle.on { background: #1a2a3a; border-color: #7df; color: #7df; }
+</style>
+</head>
+<body>
+
+<div class="preview-pane">
+    <canvas id="c"></canvas>
+    <div class="hint">
+        Green line = eye bottom edge<br>
+        Open mouth shown at 50% opacity as overlay<br>
+        Resize the preview with the "Size" slider
+    </div>
+</div>
+
+<div class="controls">
+
+    <h2>PREVIEW</h2>
+    <div class="color-row">
+        <label>Body color</label>
+        <input type="color" id="bodyColor" value="#ff83df">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>Preview size (px)</span><span class="val" id="v_size">220</span></div>
+        <input type="range" id="s_size" min="100" max="420" value="220" step="2">
+    </div>
+
+    <h2>EYES</h2>
+    <div class="toggle-row">
+        <button class="toggle on" id="t_eye" onclick="toggleEye()">PNG eye</button>
+        <button class="toggle on" id="t_eyeguide" onclick="toggleGuide()">Show guide</button>
+    </div>
+    <div class="row">
+        <div class="row-label"><span>Y factor (eyeY = <b>N</b> × fs)</span><span class="val" id="v_eyeY">-20</span></div>
+        <input type="range" id="s_eyeY" min="-80" max="20" value="-20" step="1">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>Width mult (eyeW = eyeSpc × <b>N</b> × fs)</span><span class="val" id="v_eyeW">4.8</span></div>
+        <input type="range" id="s_eyeW" min="1.0" max="9.0" value="4.8" step="0.1">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>V-center (top = eyeY − eyeW × <b>N</b>)</span><span class="val" id="v_eyeVC">0.5</span></div>
+        <input type="range" id="s_eyeVC" min="0" max="1.2" value="0.5" step="0.05">
+    </div>
+
+    <h2>MOUTH — IDLE</h2>
+    <div class="row">
+        <div class="row-label"><span>Y center (cy = <b>N</b> × fs)</span><span class="val" id="v_cy">58</span></div>
+        <input type="range" id="s_cy" min="0" max="140" value="58" step="1">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>Size (idleS = <b>N</b> × fs)</span><span class="val" id="v_ms">215</span></div>
+        <input type="range" id="s_ms" min="40" max="420" value="215" step="5">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>V-center (top = cy − idleS × <b>N</b>)</span><span class="val" id="v_mvc">0.5</span></div>
+        <input type="range" id="s_mvc" min="0" max="1.2" value="0.5" step="0.05">
+    </div>
+
+    <h2>MOUTH — OPEN (overlay, 50% opacity)</h2>
+    <div class="row">
+        <div class="row-label"><span>Y anchor (top = <b>N</b> × fs)</span><span class="val" id="v_oy">22</span></div>
+        <input type="range" id="s_oy" min="-40" max="120" value="22" step="1">
+    </div>
+    <div class="row">
+        <div class="row-label"><span>Base size (<b>N</b> × fs)</span><span class="val" id="v_os">78</span></div>
+        <input type="range" id="s_os" min="20" max="240" value="78" step="2">
+    </div>
+
+    <button class="btn" id="copyBtn" onclick="copyValues()">Copy values to clipboard</button>
+    <div class="output" id="output"></div>
+</div>
+
+<script>
+const imgs = {};
+['EYE2_IDLE','LIP1_IDLE','LIP1_OPEN','LIP2_IDLE','LIP2_OPEN','LIP3_IDLE1','LIP3_OPEN'].forEach(name => {
+    const img = new Image();
+    img.src = name + '.png';
+    img.onload = () => { imgs[name] = img; draw(); };
+});
+
+let showEye = true, showGuide = true;
+
+function toggleEye()   { showEye   = !showEye;   document.getElementById('t_eye').classList.toggle('on', showEye);   draw(); }
+function toggleGuide() { showGuide = !showGuide; document.getElementById('t_eyeguide').classList.toggle('on', showGuide); draw(); }
+
+function g(id) { return parseFloat(document.getElementById(id).value); }
+
+function draw() {
+    const size = g('s_size');
+    const c = document.getElementById('c');
+    const dpr = window.devicePixelRatio || 1;
+    c.style.width  = size + 'px';
+    c.style.height = size + 'px';
+    c.width  = size * dpr;
+    c.height = size * dpr;
+
+    const ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, size, size);
+
+    // Body circle
+    ctx.beginPath();
+    ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+    ctx.fillStyle = document.getElementById('bodyColor').value;
+    ctx.fill();
+
+    // Rim highlight
+    const hl = ctx.createRadialGradient(size*0.35, size*0.25, size*0.05, size*0.4, size*0.3, size*0.5);
+    hl.addColorStop(0, 'rgba(255,255,255,0.35)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.beginPath(); ctx.arc(size/2, size/2, size/2, 0, Math.PI*2);
+    ctx.fillStyle = hl; ctx.fill();
+
+    const r  = size / 2;
+    const sc = r / 110;  // player.baseR = 110
+    const fs = 1.1 * sc;
+
+    ctx.save();
+    ctx.translate(r, r);
+
+    // Centre crosshairs
+    if (showGuide) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-r, 0);  ctx.lineTo(r, 0);  ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -r);  ctx.lineTo(0, r);  ctx.stroke();
+    }
+
+    // ── EYES ──
+    const eyeY   = g('s_eyeY') * fs;
+    const eyeSpc = 40 * fs;
+    const eyeWm  = g('s_eyeW');
+    const eyeVC  = g('s_eyeVC');
+    const eyeW   = eyeSpc * eyeWm * fs;
+    const eyeR   = 36 * fs;
+
+    if (showEye && imgs.EYE2_IDLE) {
+        ctx.drawImage(imgs.EYE2_IDLE, -eyeW/2, eyeY - eyeW * eyeVC, eyeW, eyeW);
+    } else {
+        [-1,1].forEach(s => {
+            ctx.save(); ctx.translate(s * eyeSpc, eyeY);
+            ctx.beginPath(); ctx.arc(0,0,eyeR,0,Math.PI*2); ctx.fillStyle='#fff'; ctx.fill(); ctx.clip();
+            ctx.fillStyle='#1a1a1a'; ctx.beginPath(); ctx.arc(0,0,eyeR*0.9,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#fff';
+            ctx.beginPath(); ctx.arc(-eyeR*.4,-eyeR*.4,eyeR*.35,0,Math.PI*2); ctx.fill();
+            ctx.restore();
+        });
+    }
+
+    // Eye-bottom guide line
+    if (showGuide) {
+        const eyeBottom = eyeY + eyeR;
+        ctx.strokeStyle = 'rgba(0,255,100,0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4,4]);
+        ctx.beginPath(); ctx.moveTo(-r, eyeBottom); ctx.lineTo(r, eyeBottom); ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // ── MOUTH IDLE ──
+    const cy    = g('s_cy') * fs;
+    const idleS = g('s_ms') * fs;
+    const mvc   = g('s_mvc');
+    if (imgs.LIP1_IDLE) {
+        ctx.drawImage(imgs.LIP1_IDLE, -idleS/2, cy - idleS * mvc, idleS, idleS);
+    }
+
+    // ── MOUTH OPEN (ghost overlay) ──
+    const oy    = g('s_oy') * fs;
+    const openS = g('s_os') * fs;
+    if (imgs.LIP1_OPEN) {
+        ctx.globalAlpha = 0.45;
+        ctx.drawImage(imgs.LIP1_OPEN, -openS/2, oy, openS, openS);
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+    updateOutput();
+}
+
+function updateOutput() {
+    document.getElementById('output').textContent =
+`// ── game.html values ──────────────────
+
+// Eyes (renderPreviewFace + draw() EYE2 block)
+eyeY factor   : ${g('s_eyeY')}      // eyeY = ${g('s_eyeY')} * fs
+eyeW mult     : ${g('s_eyeW')}     // eyeW = eyeSpc * ${g('s_eyeW')} * fs
+eyeVC offset  : ${g('s_eyeVC')}    // top  = eyeY - eyeW * ${g('s_eyeVC')}
+
+// Mouth idle
+cy factor     : ${g('s_cy')}       // cy = ${g('s_cy')} * fs
+idleS mult    : ${g('s_ms')}    // idleS = ${g('s_ms')} * fs
+mvc offset    : ${g('s_mvc')}    // top  = cy - idleS * ${g('s_mvc')}
+
+// Mouth open anchor
+open yAnchor  : ${g('s_oy')}       // top = ${g('s_oy')} * fs
+open baseSize : ${g('s_os')}       // openS = ${g('s_os')} * fs`;
+}
+
+function copyValues() {
+    navigator.clipboard.writeText(document.getElementById('output').textContent).then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('success');
+        setTimeout(() => { btn.textContent = 'Copy values to clipboard'; btn.classList.remove('success'); }, 1500);
+    });
+}
+
+// Wire sliders
+document.querySelectorAll('input[type=range], input[type=color]').forEach(el => {
+    const valEl = document.getElementById('v_' + el.id.slice(2));
+    el.addEventListener('input', () => {
+        if (valEl) valEl.textContent = el.value;
+        draw();
+    });
+});
+
+setTimeout(draw, 50);
+</script>
+</body>
+</html>
