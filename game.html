@@ -935,21 +935,6 @@ function spawnAnimeExplosion(x, y) {
     }
 }
 
-// ─────────────────────────────────────────────
-// NOISE TEXTURES
-// ─────────────────────────────────────────────
-const noiseSize   = 256;
-const noiseCanvas = document.createElement('canvas');
-noiseCanvas.width = noiseCanvas.height = noiseSize;
-const nCtx    = noiseCanvas.getContext('2d');
-const imgData = nCtx.createImageData(noiseSize, noiseSize);
-for (let i = 0; i < imgData.data.length; i += 4) {
-    const v = Math.random() > 0.5 ? 255 : 0; 
-    imgData.data[i] = imgData.data[i+1] = imgData.data[i+2] = v;
-    imgData.data[i+3] = IS_TOUCH ? (12 + Math.random() * 18) : (30 + Math.random() * 40);
-}
-nCtx.putImageData(imgData, 0, 0);
-const noisePattern = ctx.createPattern(noiseCanvas, 'repeat');
 
 // ─────────────────────────────────────────────
 // PROCEDURAL SVG EXTRACTION (MAGIC MESH GENERATOR)
@@ -2956,28 +2941,21 @@ function draw() {
         } else if (window.PLAYER_EYE_TYPE === 7) {
             // EYE2 PNG — direction states + blink squish + iris hue tinted to player color
             const blink = player.anim.blink;
-            if (blink < 0.98) {
-                const ex = Math.cos(eyeAngle);
-                const eyeDir = ex < -0.3 ? eye2Left : ex > 0.3 ? eye2Right : eye2Idle;
-                if (eyeDir.complete && eyeDir.naturalWidth > 0) {
-                    // Hue-rotate iris from base blue (~210°) to player color hue
-                    const _ph = window._eye2HueFilter || 'none';
-                    ctx.save();
-                    if (_ph !== 'none') ctx.filter = _ph;
-                    const eyeW = eyeSpc * _ep.wm * fs;
-                    ctx.scale(1, 1 - blink);
-                    ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * _ep.vc, eyeW, eyeW);
-                    ctx.restore();
-                } else { drawEye(-1); drawEye(1); }
-            } else {
-                // Fully blinked — draw closed line
-                [-1, 1].forEach(side => {
-                    ctx.save(); ctx.translate(side * eyeSpc, eyeY);
-                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 6 * fs; ctx.lineCap = 'round';
-                    ctx.beginPath(); ctx.moveTo(-eyeR * 0.8, 0); ctx.quadraticCurveTo(0, eyeR * 0.4, eyeR * 0.8, 0); ctx.stroke();
-                    ctx.restore();
-                });
-            }
+            const ex = Math.cos(eyeAngle);
+            const eyeDir = ex < -0.3 ? eye2Left : ex > 0.3 ? eye2Right : eye2Idle;
+            if (eyeDir.complete && eyeDir.naturalWidth > 0 && blink < 0.999) {
+                const _ph = window._eye2HueFilter || 'none';
+                const eyeW = eyeSpc * _ep.wm * fs;
+                // Squish vertically from the eye's own centre so it closes in-place
+                const eyeMidY = eyeY - eyeW * _ep.vc + eyeW * 0.5;
+                ctx.save();
+                if (_ph !== 'none') ctx.filter = _ph;
+                ctx.translate(0, eyeMidY);
+                ctx.scale(1, 1 - blink);
+                ctx.translate(0, -eyeMidY);
+                ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * _ep.vc, eyeW, eyeW);
+                ctx.restore();
+            } else if (blink >= 0.999) { /* fully closed — nothing drawn */ }
         } else {
             const eyeImg = custEyeImages[window.PLAYER_EYE_TYPE];
             if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
@@ -3015,7 +2993,7 @@ function draw() {
             if (idleA > 0.01) {
                 if (lt === 3) {
                     // LIP3: tongue lazily flips between idle1/idle2 each with its own position+size
-                    const useIdle2 = (Math.floor(player.anim.time / 130) % 2 !== 0);
+                    const useIdle2 = (Math.floor(player.anim.time / 2) % 2 !== 0);
                     const lipState = useIdle2 ? (_lp.idle2 || _lp.idle) : _lp.idle;
                     const idleImg  = useIdle2 ? lip3Idle2 : lip3Idle1;
                     if (idleImg.complete && idleImg.naturalWidth > 0) {
@@ -3101,14 +3079,6 @@ function draw() {
         ctx.restore(); // camera
     } // end death / normal branch
 
-    if (!IS_TOUCH) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'overlay';
-        noisePattern.setTransform(new DOMMatrix().translateSelf(Math.random() * noiseSize, Math.random() * noiseSize));
-        ctx.fillStyle = noisePattern;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.restore();
-    }
 
     if (flashAlpha > 0) {
         ctx.fillStyle = `rgba(255,255,255,${flashAlpha})`;
