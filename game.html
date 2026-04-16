@@ -1531,8 +1531,12 @@ function update() {
             winPhase = 2;
             const gemName = (playingStage > 0 && playingStage <= NECKLACE_GEMS.length)
                 ? NECKLACE_GEMS[playingStage - 1].name : '';
+            const nextStageNum = (playingStage >= 1 ? playingStage : currentStage) + 1;
+            const stageUnlockMsg = (nextStageNum > currentStage && nextStageNum <= TOTAL_STAGES)
+                ? `<p style="font-size:clamp(11px,2.5vw,16px);letter-spacing:3px;opacity:0.9">STAGE ${nextStageNum} UNLOCKED</p>` : '';
             document.getElementById('win-stats').innerHTML =
-                (gemName ? `<p>✦ ${gemName} GEM UNLOCKED ✦</p>` : '') +
+                (gemName ? `<p>✦ ${gemName} GEM COLLECTED ✦</p>` : '') +
+                stageUnlockMsg +
                 `<p>PEARLS EARNED: <span>${enemiesEaten}</span></p>`;
             winOverlay.style.display = 'flex';
             setTimeout(() => { winOverlay.style.opacity = '1'; }, 50);
@@ -4232,6 +4236,15 @@ function renderNecklaceMap() {
             }
         }
 
+        // Completed checkmark badge
+        if (completed) {
+            const b = getGemBounds(gem);
+            const cx = b.cx, cy = b.minY - 10;
+            const r = 8;
+            svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(255,255,255,0.92)"/>`;
+            svg += `<polyline points="${cx - r*0.45},${cy} ${cx - r*0.1},${cy + r*0.42} ${cx + r*0.5},${cy - r*0.4}" fill="none" stroke="#2aa87a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+        }
+
         svg += `</g>`;
 
         // Current stage arrow indicator
@@ -4331,9 +4344,10 @@ function returnToMenuAfterGame() {
     // Award pearls for enemies eaten during the game
     totalPearls += enemiesEaten;
     if (winPhase === 2) {
-        // Win — advance stage if it's the current frontier
-        if (playingStage === currentStage && currentStage <= TOTAL_STAGES) {
-            currentStage++;
+        // Win — advance frontier past the completed stage
+        const nextStage = (playingStage >= 1 ? playingStage : currentStage) + 1;
+        if (nextStage > currentStage && nextStage <= TOTAL_STAGES + 1) {
+            currentStage = nextStage;
         }
     } else {
         // Game over — lose a heart
