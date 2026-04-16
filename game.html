@@ -164,12 +164,12 @@
             box-shadow: inset -10px -20px 40px rgba(0,0,0,0.15), inset 10px 10px 30px rgba(255,255,255,0.3);
         }
         .mochi-eyes {
-            position: absolute; width: 70%; height: 40%; left: 15%; top: 25%;
+            position: absolute; width: 88%; height: 46%; left: 6%; top: 6%;
             background-size: contain; background-repeat: no-repeat; background-position: center;
             transition: background-image 0.3s ease;
         }
         .mochi-mouth {
-            position: absolute; width: 40%; height: 20%; bottom: 18%; left: 30%;
+            position: absolute; width: 96%; height: 58%; left: 2%; top: 40%;
             background-size: contain; background-repeat: no-repeat; background-position: center;
             transition: background-image 0.3s ease;
         }
@@ -336,11 +336,11 @@
             background: #ff83df; position: relative;
         }
         .menu-avatar .avatar-eyes {
-            position: absolute; width: 70%; height: 40%; left: 15%; top: 25%;
+            position: absolute; width: 88%; height: 46%; left: 6%; top: 6%;
             background-size: contain; background-repeat: no-repeat; background-position: center;
         }
         .menu-avatar .avatar-mouth {
-            position: absolute; width: 40%; height: 20%; bottom: 18%; left: 30%;
+            position: absolute; width: 96%; height: 58%; left: 2%; top: 40%;
             background-size: contain; background-repeat: no-repeat; background-position: center;
         }
 
@@ -726,7 +726,23 @@
 // ─────────────────────────────────────────────
 window.PLAYER_COLOR    = localStorage.getItem('avatarColor') || '#ff83df';
 window.PLAYER_EYE_TYPE = 2;         // 0=default, 1=goggles, 2=eyes1, 3=eyes2
-window.PLAYER_LIP_TYPE = 0;         // 0=default, 1=lipstick, 2=anime
+window.PLAYER_LIP_TYPE = 1;         // 1=LIP1(png), 2=LIP2(png), 3=LIP3(png)
+
+// Compute hue-rotate filter for EYE2 iris — shifts the base blue (#8dc1ff, ~210°) to player color hue
+function _updateEye2HueFilter() {
+    const hex = window.PLAYER_COLOR;
+    const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
+    const max = Math.max(r,g,b), min = Math.min(r,g,b), d = max - min;
+    let h = 0;
+    if (d > 0) {
+        if (max === r)      h = ((g-b)/d + (g<b?6:0)) * 60;
+        else if (max === g) h = ((b-r)/d + 2) * 60;
+        else                h = ((r-g)/d + 4) * 60;
+    }
+    const shift = Math.round(h - 210); // 210° is the blue base hue of EYE2
+    window._eye2HueFilter = shift !== 0 ? `hue-rotate(${shift}deg) saturate(1.1)` : 'none';
+}
+_updateEye2HueFilter();
 
 function dismissOpening() {
     const os = document.getElementById('opening-screen');
@@ -777,6 +793,20 @@ const custEyeImages = [null, custGogglesImg, custEyeImg1, custEyeImg2, custEyeIm
 const custEyeAspect = [1, 76.93/254.61, 199.44/298.08, 115.27/215.8, 80/200, 70/220, 90/200];
 const custEyeVCenter = [0, 0.5, 0.5, 0.55, 0.55, 0.5, 0.5]; // vertical centering fraction
 
+// PNG eye assets — type 7 (EYE2: side-to-side states, blink via scaleY, iris hue-tinted)
+const eye2Idle  = new Image(); eye2Idle.src  = 'EYE2_IDLE.png';
+const eye2Left  = new Image(); eye2Left.src  = 'EYE2_LEFT.png';
+const eye2Right = new Image(); eye2Right.src = 'EYE2_RIGHT.png';
+
+// PNG lip assets
+const lip1Idle  = new Image(); lip1Idle.src  = 'LIP1_IDLE.png';
+const lip1Open  = new Image(); lip1Open.src  = 'LIP1_OPEN.png';
+const lip2Idle  = new Image(); lip2Idle.src  = 'LIP2_IDLE.png';
+const lip2Open  = new Image(); lip2Open.src  = 'LIP2_OPEN.png';
+const lip3Idle1 = new Image(); lip3Idle1.src = 'LIP3_IDLE1.png';
+const lip3Idle2 = new Image(); lip3Idle2.src = 'LIP3_IDLE2.png';
+const lip3Open  = new Image(); lip3Open.src  = 'LIP3_OPEN.png';
+
 // ─────────────────────────────────────────────
 // SETUP
 // ─────────────────────────────────────────────
@@ -793,9 +823,11 @@ const entityCtx    = entityCanvas.getContext('2d');
 const lightCanvas  = document.createElement('canvas');
 const lightCtx     = lightCanvas.getContext('2d');
 
+let _stage1BgGrad = null; // cached once, invalidated on resize
 function resizeCanvas() {
     canvas.width = entityCanvas.width = lightCanvas.width  = window.innerWidth;
     canvas.height = entityCanvas.height = lightCanvas.height = window.innerHeight;
+    _stage1BgGrad = null; // invalidate cache on resize
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
@@ -1165,8 +1197,28 @@ addStartingItem('headRight', 'shard3', 1.3);
 // ─────────────────────────────────────────────
 // SPAWN & VERSATILITY SYSTEM
 // ─────────────────────────────────────────────
-let items = [], enemies = [];
+let items = [], enemies = [], swallowFX = [];
 const standardItems = ['gem', 'shard1', 'shard2', 'shard3', 'shard4', 'shard5', 'shard6', 'shard7', 'custom1', 'custom2', 'custom3', 'custom4', 'custom5'];
+
+// ── SDF hot-path cache (refreshed once per frame, reused across all 600+ calls) ──
+let _sdfPx = 0, _sdfPy = 0, _sdfWobble = 0, _sdfBaseR08 = 0, _sdfCheek = 0, _sdfTime2 = 0;
+let _sdfBones = []; // flat cache: {bx,by,w09,w2,w015,w008,ao}
+function _refreshSDF() {
+    _sdfPx     = player.x;
+    _sdfPy     = player.y;
+    _sdfWobble = player.baseR + player.wobble + Math.sin(player.anim.time * 4) * 2;
+    _sdfBaseR08= player.baseR * 0.8;
+    _sdfCheek  = (coveragePercent > 50 ? 30 : 0) + player.anim.puff * 40;
+    _sdfTime2  = player.anim.time * 2;
+    // Rebuild bone cache only when bone count changes (cheap check)
+    if (_sdfBones.length !== player.bones.length) {
+        _sdfBones = player.bones.map(b => ({ bx:0, by:0, w09: b.w*0.9, w2: b.w*2, w015: b.w*0.15, w008: b.w*0.08, ao: b.ambientOffset }));
+    }
+    for (let i = 0; i < player.bones.length; i++) {
+        _sdfBones[i].bx = _sdfPx + player.bones[i].curX;
+        _sdfBones[i].by = _sdfPy + player.bones[i].curY;
+    }
+}
 
 // Active stage settings — overwritten by startGame(); default = full game
 let stageItemTypes  = standardItems.slice();
@@ -1350,23 +1402,24 @@ function sdPoly(px, py, vertices) {
     return Math.sqrt(d) * s;
 }
 function getSceneSDF(px, py) {
-    let d = Math.sqrt((px-player.x)**2 + (py-player.y)**2) - (player.baseR + player.wobble + Math.sin(player.anim.time*4)*2);
-    const cheekSize = (coveragePercent > 50 ? 30 : 0) + player.anim.puff * 40;
-    if (cheekSize > 0) {
-        d = smin(d, Math.sqrt((px-(player.x-60))**2 + (py-player.y)**2) - (player.baseR*0.8+cheekSize), 40);
-        d = smin(d, Math.sqrt((px-(player.x+60))**2 + (py-player.y)**2) - (player.baseR*0.8+cheekSize), 40);
+    let d = Math.sqrt((px-_sdfPx)**2 + (py-_sdfPy)**2) - _sdfWobble;
+    if (_sdfCheek > 0) {
+        d = smin(d, Math.sqrt((px-(_sdfPx-60))**2 + (py-_sdfPy)**2) - (_sdfBaseR08+_sdfCheek), 40);
+        d = smin(d, Math.sqrt((px-(_sdfPx+60))**2 + (py-_sdfPy)**2) - (_sdfBaseR08+_sdfCheek), 40);
     }
-    player.bones.forEach(b => {
-        const bx = player.x + b.curX, by = player.y + b.curY;
-        const fastDist = Math.hypot(px-bx, py-by);
-        let d2 = fastDist - b.w * 0.9;
-        if (fastDist < b.w * 2) {
-            const bn = Math.sin(Math.atan2(py-by,px-bx)*3 + player.anim.time*2 + b.ambientOffset) * (b.w*0.15);
-            d2 -= (b.w*0.08) + Math.max(0, bn);
+    const ia = Math.atan2(py-_sdfPy, px-_sdfPx);
+    const blendK = (ia > -Math.PI*0.75 && ia < -Math.PI*0.25) ? 10 : 25;
+    for (let i = 0; i < _sdfBones.length; i++) {
+        const cb = _sdfBones[i];
+        const dx = px - cb.bx, dy = py - cb.by;
+        const fastDist = Math.sqrt(dx*dx + dy*dy);
+        let d2 = fastDist - cb.w09;
+        if (fastDist < cb.w2) {
+            const bn = Math.sin(Math.atan2(dy,dx)*3 + _sdfTime2 + cb.ao) * cb.w015;
+            d2 -= cb.w008 + Math.max(0, bn);
         }
-        const ia = Math.atan2(py-player.y, px-player.x);
-        d = smin(d, d2, (ia > -Math.PI*0.75 && ia < -Math.PI*0.25) ? 10 : 25);
-    });
+        d = smin(d, d2, blendK);
+    }
     return d;
 }
 
@@ -1558,6 +1611,7 @@ function update() {
 
     // Enemies + danger meter
     if (winPhase === 0) {
+        _refreshSDF(); // cache player state once for all enemy SDF collision checks below
         let closestEnemy = Infinity;
         enemies.forEach((en, idx) => {
             if (en.exploding) {
@@ -1756,6 +1810,13 @@ function update() {
             const eatDist = winPhase === 1 ? 150 : player.baseR*0.8 + 20*it.scale;
             if (dist < eatDist) {
                 it.active = false;
+                // Spawn a swallow FX particle so the item visually slides into the mouth
+                swallowFX.push({
+                    x: it.x, y: it.y,
+                    type: it.type, scale: it.scale, rot: it.rot,
+                    img: it.img, w: it.w, color: it.color,
+                    t: 0 // 0 → 1 over ~18 frames
+                });
                 player.anim.gulp = 1; player.anim.puff = 1;
                 if (winPhase === 1) {
                     player.baseR += 100; player.wobbleV += 150;
@@ -1801,6 +1862,12 @@ function update() {
         // unused, win now triggers immediately at 100%
     } else {
         player.anim.mouth += ((vacuuming ? 1 : 0) - player.anim.mouth) * (1 - Math.pow(1 - 0.2, dt));
+    }
+
+    // Advance swallow FX timers
+    for (let i = swallowFX.length - 1; i >= 0; i--) {
+        swallowFX[i].t += 0.07 * dt; // ~14 frames to complete
+        if (swallowFX[i].t >= 1) swallowFX.splice(i, 1);
     }
 
     if (vacuuming) player.anim.suckWave += 0.4 * dt;
@@ -2276,14 +2343,16 @@ function draw() {
         // Flat colour wash — just a breath of green over the black
         ctx.fillStyle = 'rgba(60, 185, 110, 0.055)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Soft green bloom pooling at the edges
-        const _sg1 = ctx.createRadialGradient(
-            canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.22,
-            canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.92
-        );
-        _sg1.addColorStop(0, 'rgba(0,0,0,0)');
-        _sg1.addColorStop(1, 'rgba(60,185,110,0.11)');
-        ctx.fillStyle = _sg1;
+        // Soft green bloom pooling at the edges (gradient cached; rebuilt only on resize)
+        if (!_stage1BgGrad) {
+            _stage1BgGrad = ctx.createRadialGradient(
+                canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.22,
+                canvas.width * 0.5, canvas.height * 0.5, canvas.height * 0.92
+            );
+            _stage1BgGrad.addColorStop(0, 'rgba(0,0,0,0)');
+            _stage1BgGrad.addColorStop(1, 'rgba(60,185,110,0.11)');
+        }
+        ctx.fillStyle = _stage1BgGrad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -2326,6 +2395,7 @@ function draw() {
     const pts = [];
     const RAY_COUNT = IS_TOUCH ? 60 : 150;
     const SDF_STEPS = IS_TOUCH ? 10 : 25;
+    _refreshSDF(); // cache player state once for all ray-march calls below
     for (let i = 0; i <= RAY_COUNT; i++) {
         const a = (i/RAY_COUNT)*Math.PI*2, dx = Math.cos(a), dy = Math.sin(a);
         let dist = 10;
@@ -2585,6 +2655,7 @@ function draw() {
         entityCtx.restore();
     });
 
+
     entityCtx.restore();
 
     ctx.globalCompositeOperation = 'source-over';
@@ -2629,30 +2700,29 @@ function draw() {
         lightCtx.scale(1, dynamicSquash); 
         
         // ALL spotlights go red when player is inside any one of them
-        const _flicker = spotlightDanger
-            ? 0.58 + Math.sin(globalFlickerPhase * 1.0 + spot.orbitR * 0.002) * 0.24
-                   + Math.sin(globalFlickerPhase * 1.7 + spot.orbitR * 0.003) * 0.14
-            : 1;
-
-        let grad;
+        // Flicker applied via globalAlpha (avoids re-baking into gradient stops each frame)
         if (spotlightDanger) {
-            // Each spotlight gets a unique red shade — same sharp flat style as normal
-            const _g = Math.floor((spot.orbitR * 0.11 + 8)  % 70);   // green 8–78  (darker = redder)
-            const _b = Math.floor((spot.orbitR * 0.04 + 0)  % 30);   // blue  0–30  (slight warmth variation)
+            lightCtx.globalAlpha = 0.58 + Math.sin(globalFlickerPhase * 1.0 + spot.orbitR * 0.002) * 0.24
+                                        + Math.sin(globalFlickerPhase * 1.7 + spot.orbitR * 0.003) * 0.14;
+            // Each spotlight gets a unique red shade
+            const _g = Math.floor((spot.orbitR * 0.11 + 8) % 70);
+            const _b = Math.floor((spot.orbitR * 0.04 + 0) % 30);
             const _col = `255,${_g},${_b}`;
-            grad = lightCtx.createRadialGradient(0,0, sr*0.85, 0,0, sr);
-            grad.addColorStop(0,   `rgba(${_col},${0.3 * _flicker})`);
-            grad.addColorStop(0.9, `rgba(${_col},${0.3 * _flicker})`);
+            const grad = lightCtx.createRadialGradient(0,0, sr*0.85, 0,0, sr);
+            grad.addColorStop(0,   `rgba(${_col},0.3)`);
+            grad.addColorStop(0.9, `rgba(${_col},0.3)`);
             grad.addColorStop(1,   `rgba(${_col},0)`);
+            lightCtx.fillStyle = grad;
         } else {
-            grad = lightCtx.createRadialGradient(0,0,sr*0.85, 0,0,sr);
+            const grad = lightCtx.createRadialGradient(0,0,sr*0.85, 0,0,sr);
             grad.addColorStop(0,   `rgba(${spot.color},0.3)`);
             grad.addColorStop(0.9, `rgba(${spot.color},0.3)`);
             grad.addColorStop(1,   `rgba(${spot.color},0)`);
+            lightCtx.fillStyle = grad;
         }
 
-        lightCtx.fillStyle = grad;
         lightCtx.beginPath(); lightCtx.arc(0,0,sr,0,Math.PI*2); lightCtx.fill();
+        lightCtx.globalAlpha = 1;
         lightCtx.restore();
     });
 
@@ -2882,6 +2952,31 @@ function draw() {
             drawEye(-1); drawEye(1);
         } else if (window.PLAYER_EYE_TYPE === 6) {
             drawEyeColored(-1); drawEyeColored(1);
+        } else if (window.PLAYER_EYE_TYPE === 7) {
+            // EYE2 PNG — direction states + blink squish + iris hue tinted to player color
+            const blink = player.anim.blink;
+            if (blink < 0.98) {
+                const ex = Math.cos(eyeAngle);
+                const eyeDir = ex < -0.3 ? eye2Left : ex > 0.3 ? eye2Right : eye2Idle;
+                if (eyeDir.complete && eyeDir.naturalWidth > 0) {
+                    // Hue-rotate iris from base blue (~210°) to player color hue
+                    const _ph = window._eye2HueFilter || 'none';
+                    ctx.save();
+                    if (_ph !== 'none') ctx.filter = _ph;
+                    const eyeW = eyeSpc * 4.8 * fs;
+                    ctx.scale(1, 1 - blink);
+                    ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * 0.5, eyeW, eyeW);
+                    ctx.restore();
+                } else { drawEye(-1); drawEye(1); }
+            } else {
+                // Fully blinked — draw closed line
+                [-1, 1].forEach(side => {
+                    ctx.save(); ctx.translate(side * eyeSpc, eyeY);
+                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 6 * fs; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(-eyeR * 0.8, 0); ctx.quadraticCurveTo(0, eyeR * 0.4, eyeR * 0.8, 0); ctx.stroke();
+                    ctx.restore();
+                });
+            }
         } else {
             const eyeImg = custEyeImages[window.PLAYER_EYE_TYPE];
             if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
@@ -2900,42 +2995,46 @@ function draw() {
         ctx.ellipse( blushX, eyeY+52*fs, 15*fs, 9*fs, 0,0,6.28);
         ctx.fill();
 
-        const gi = coveragePercent/100;
-        let openW, openH;
-        if (coveragePercent >= 70) { openW=(65+gi*40)-player.anim.gulp*15; openH=65+gi*40; }
-        else                       { openW=(25+gi*70)-player.anim.gulp*15; openH=80+gi*50; }
-        let mW = (10+(openW-10)*player.anim.mouth)*fs;
-        let mH = (10+(openH-10)*player.anim.mouth)*fs;
-        if (player.anim.mouth > 0.5) { const pu=Math.sin(player.anim.time*25)*0.08; mW*=(1-pu); mH*=(1+pu); }
+        // ── PNG mouth ────────────────────────────────────────────────────
+        {
+            const lt = window.PLAYER_LIP_TYPE;
+            const m  = player.anim.mouth; // 0=closed → 1=open
+            const cy = 58 * fs;
 
-        ctx.save();
-        const mg = ctx.createRadialGradient(0,46*fs,mH*0.05, 0,46*fs,mH*0.9);
-        mg.addColorStop(0,'#220011'); mg.addColorStop(1,'#8a1b32');
-        ctx.fillStyle = mg;
-        ctx.beginPath(); ctx.ellipse(0,46*fs,mW,mH,0,0,6.28); ctx.fill();
-        ctx.strokeStyle = 'rgba(10,50,40,0.6)'; ctx.lineWidth = 4*fs; ctx.stroke();
-        ctx.clip();
-        if (player.anim.mouth > 0.05) {
-            const tf = player.anim.mouth > 0.5 ? Math.sin(player.anim.time*40)*2 : 0;
-            const ry = 46*fs + mH*0.5*player.anim.mouth + Math.sin(player.anim.time*12)*4 + tf;
-            const tw=mW*0.85, th=mH*0.55;
-            ctx.fillStyle = '#ff70a0';
-            ctx.beginPath(); ctx.moveTo(0,ry+th*0.1);
-            ctx.bezierCurveTo(-tw,ry-th*0.2,-tw,ry+th,0,ry+th*0.9);
-            ctx.bezierCurveTo( tw,ry-th*0.2, tw,ry+th,0,ry+th*0.1);
-            ctx.fill();
-        }
-        ctx.restore(); // mouth clip
+            let idleImg, openImg;
+            if (lt === 2) { idleImg = lip2Idle; openImg = lip2Open; }
+            else if (lt === 3) {
+                // LIP3: tongue lazily flips side every ~2s
+                idleImg = (Math.floor(player.anim.time / 130) % 2 === 0) ? lip3Idle1 : lip3Idle2;
+                openImg = lip3Open;
+            } else { idleImg = lip1Idle; openImg = lip1Open; } // default = LIP1
 
-        if (window.PLAYER_LIP_TYPE > 0) {
-            const lipA = Math.max(0, 1 - player.anim.mouth * 3);
-            if (lipA > 0.01) {
-                ctx.save();
-                ctx.globalAlpha = lipA;
-                if (window.PLAYER_LIP_TYPE === 1) drawLipstick(ctx, fs);
-                else if (window.PLAYER_LIP_TYPE === 2) drawAnimeLips(ctx, fs);
-                ctx.restore();
+            // Idle: larger than eye PNG (~211px) so lips dominate the face
+            const idleS = 215 * fs;
+            const idleA = Math.max(0, 1 - m * 3.5);
+
+            // Open: sized so mouth is ~55% of face diameter, well below the eyes
+            // cy pushed to 58*fs so the top of the dome clears the eye bottoms (at ~18*fs)
+            const gi = coveragePercent / 100;
+            const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (78 + gi * 22) * fs;
+            const openS = baseOpen + player.anim.gulp * 14 * fs;
+            // Organic wobble when wide open
+            const wobble = m > 0.5 ? Math.sin(player.anim.time * 25) * 0.04 : 0;
+            const openW  = openS * (1 - wobble);
+            const openH  = openS * (1 + wobble);
+            const openA  = Math.min(1, m * 2);
+
+            ctx.save();
+            if (idleA > 0.01 && idleImg.complete && idleImg.naturalWidth > 0) {
+                ctx.globalAlpha = idleA;
+                ctx.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
             }
+            if (openA > 0.01 && openImg.complete && openImg.naturalWidth > 0) {
+                ctx.globalAlpha = openA;
+                // Anchor top of PNG just below eye-bottom (~18*fs); dome hangs down from there
+                ctx.drawImage(openImg, -openW / 2, 22 * fs, openW, openH);
+            }
+            ctx.restore();
         }
 
         ctx.restore(); // face translate
@@ -2953,6 +3052,40 @@ function draw() {
             ctx.fill();
             ctx.restore();
         }
+        // Swallow FX — perspective cone: item recedes into depth toward the mouth
+        if (swallowFX.length > 0) {
+            const _mx = player.x, _my = player.y + 46;
+            swallowFX.forEach(fx => {
+                const t = fx.t;
+                const ease = t * t; // quadratic — gentle start, accelerates in
+
+                // Curved path: item arcs slightly sideways before being pulled straight in
+                // The arc direction is derived from the item's starting angle around the mouth
+                const startAngle = Math.atan2(fx.y - _my, fx.x - _mx);
+                const arcAmt = Math.sin(startAngle * 1.5) * 35 * Math.sin(t * Math.PI); // peaks mid-flight, zero at start/end
+                const perpX = -Math.sin(startAngle), perpY = Math.cos(startAngle);
+                const x = fx.x + (_mx - fx.x) * ease + perpX * arcAmt;
+                const y = fx.y + (_my - fx.y) * ease + perpY * arcAmt;
+
+                // Perspective recession: item appears to fall into a cone (z-depth shrink)
+                // 1/(1+depth) gives natural perspective foreshortening, not a mechanical linear scale
+                const depth = t * t * 7;
+                const sc = 1 / (1 + depth);
+
+                // Slow natural tumble — no forced axis alignment
+                const spin = fx.rot + t * 1.1;
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, 1 - t * t * 1.1);
+                ctx.translate(x, y);
+                ctx.rotate(spin);
+                ctx.scale(sc, sc);
+                draw3DItem(ctx, fx, 0, 0, false);
+                ctx.restore();
+            });
+            ctx.globalAlpha = 1;
+        }
+
         ctx.restore(); // camera
     } // end death / normal branch
 
@@ -3365,16 +3498,19 @@ const EYE_OPTIONS = [
     encodeSVG(rawSvgGoggles),
     encodeSVG(rawSvgCuteEyes),
     encodeSVG(rawSvgSmallEyes),
-    encodeSVG(rawSvgNewEyes)
+    encodeSVG(rawSvgNewEyes),
+    `url('EYE2_IDLE.png')`   // index 4 = EYE2 PNG
 ];
 // Maps carousel index → window.PLAYER_EYE_TYPE
-const EYE_TYPE_MAP = [1, 2, 3, 6];
+const EYE_TYPE_MAP = [1, 2, 3, 6, 7];
 
 const LIP_OPTIONS = [
-    encodeSVG(rawSvgLip1),
-    encodeSVG(rawSvgLip2),
-    encodeSVG(rawSvgLip3)
+    `url('LIP1_IDLE.png')`,  // index 0 = LIP1 (default)
+    `url('LIP2_IDLE.png')`,  // index 1 = LIP2
+    `url('LIP3_IDLE1.png')`  // index 2 = LIP3
 ];
+// Maps carousel index → window.PLAYER_LIP_TYPE
+const LIP_TYPE_MAP = [1, 2, 3];
 
 let currentColor = localStorage.getItem('avatarColor') || CUST_COLORS[0];
 let currentEyeIndex = parseInt(localStorage.getItem('avatarEyeIndex') || '1');
@@ -3479,8 +3615,9 @@ function startGame() {
         return;
     }
     window.PLAYER_COLOR = currentColor;
+    _updateEye2HueFilter();
     window.PLAYER_EYE_TYPE = EYE_TYPE_MAP[currentEyeIndex];
-    window.PLAYER_LIP_TYPE = currentLipIndex;
+    window.PLAYER_LIP_TYPE = LIP_TYPE_MAP[currentLipIndex];
     document.getElementById('customizer-overlay').style.display = 'none';
     document.getElementById('main-menu').classList.remove('visible');
 
@@ -3496,6 +3633,7 @@ function startGame() {
     // Re-seed items — cap at 25 on mobile to keep 60fps
     const _itemCount = IS_TOUCH ? Math.min(_cfg.itemCount || 25, 25) : (_cfg.itemCount || 25);
     items.length = 0;
+    swallowFX.length = 0;
     for (let i = 0; i < _itemCount; i++) items.push(spawn(i > 5));
     // Guarantee at least one of each unlocked type near the player
     stageItemTypes.forEach(t => items.push(spawn(false, undefined, undefined, t)));
