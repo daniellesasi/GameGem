@@ -2856,6 +2856,11 @@ function draw() {
 
         ctx.save();
         ctx.translate(player.x, player.y-15);
+        // Clip face features to body circle — matches face_editor's circle clip so
+        // large PNGs (EYE2 ~151px wide, big mouths) don't overflow the body silhouette
+        ctx.beginPath();
+        ctx.arc(0, 0, player.baseR, 0, Math.PI * 2);
+        ctx.clip();
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
