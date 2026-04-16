@@ -75,6 +75,22 @@ hr { border: none; border-top: 1px solid #222; }
 
 .drag-hint { font-size: 10px; color: #444; text-align: center; }
 #colorPicker { width: 38px; height: 38px; border: none; padding: 0; cursor: pointer; border-radius: 50%; background: none; }
+
+/* ── Blend tester ── */
+#blendSection { display: flex; flex-direction: column; gap: 10px; }
+#blendCanvas  { display: block; border-radius: 12px; border: 1px solid #333; }
+.blend-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+#blendModeSelect {
+    flex: 1; min-width: 160px;
+    background: #1a1a1a; color: #ff83df; border: 1px solid #333;
+    padding: 6px 10px; border-radius: 8px; font-size: 12px;
+    font-family: 'Courier New', monospace; cursor: pointer;
+}
+#blendModeSelect:focus { outline: 1px solid #ff83df; }
+.blend-badge {
+    font-size: 11px; color: #555; letter-spacing: 1px;
+    text-transform: uppercase; white-space: nowrap;
+}
 </style>
 </head>
 <body>
@@ -194,6 +210,44 @@ hr { border: none; border-top: 1px solid #222; }
         <h3>Export — paste these values into game.html</h3>
         <div id="output"></div>
         <button id="copyBtn" onclick="copyParams()">Copy to Clipboard</button>
+    </div>
+
+    <hr>
+
+    <div id="blendSection" class="section">
+        <h3>Gem Blend Mode Tester</h3>
+        <canvas id="blendCanvas" width="400" height="400"></canvas>
+        <div class="blend-controls">
+            <span class="blend-badge">Mode</span>
+            <select id="blendModeSelect">
+                <option value="normal">normal</option>
+                <option value="screen" selected>screen</option>
+                <option value="overlay">overlay</option>
+                <option value="hard-light">hard-light</option>
+                <option value="soft-light">soft-light</option>
+                <option value="multiply">multiply</option>
+                <option value="color-dodge">color-dodge</option>
+                <option value="color-burn">color-burn</option>
+                <option value="lighten">lighten</option>
+                <option value="darken">darken</option>
+                <option value="difference">difference</option>
+                <option value="exclusion">exclusion</option>
+                <option value="hue">hue</option>
+                <option value="saturation">saturation</option>
+                <option value="color">color</option>
+                <option value="luminosity">luminosity</option>
+            </select>
+        </div>
+        <div class="blend-controls">
+            <span class="blend-badge">Gem Opacity</span>
+            <input type="range" id="blendOpacity" min="0" max="1" step="0.01" value="0.75" style="flex:1">
+            <input class="val" id="blendOpacityVal" type="number" min="0" max="1" step="0.01" value="0.75">
+        </div>
+        <div class="blend-controls">
+            <span class="blend-badge">Body Opacity</span>
+            <input type="range" id="bodyOpacity" min="0" max="1" step="0.01" value="1" style="flex:1">
+            <input class="val" id="bodyOpacityVal" type="number" min="0" max="1" step="0.01" value="1">
+        </div>
     </div>
 </div>
 
@@ -444,6 +498,7 @@ function redrawAll() {
     drawFaceOnCanvas(document.getElementById('c200'), 200, 200, false);
     drawFaceOnCanvas(document.getElementById('c300'), 300, 300, false);
     updateOutput();
+    if (typeof drawBlendTest === 'function') drawBlendTest();
 }
 
 // ─── DRAG SYSTEM ──────────────────────────────────────────
@@ -675,6 +730,188 @@ function lightenHex(hex, pct) {
     r = Math.round(r + (255-r)*pct); g = Math.round(g + (255-g)*pct); b = Math.round(b + (255-b)*pct);
     return '#' + [r,g,b].map(v=>Math.min(255,v).toString(16).padStart(2,'0')).join('');
 }
+
+// ─── BLEND TESTER ─────────────────────────────────────────
+// Draw a gem polygon given a set of points (normalised -1..1), fill with gradient
+function drawGem(c, cx, cy, size, pts, colTop, colBot) {
+    const scaled = pts.map(([px, py]) => [cx + px * size, cy + py * size]);
+    const grad = c.createLinearGradient(cx, cy - size, cx, cy + size);
+    grad.addColorStop(0, colTop);
+    grad.addColorStop(1, colBot);
+    c.beginPath();
+    scaled.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
+    c.closePath();
+    c.fillStyle = grad;
+    c.fill();
+    // Facet highlight
+    c.beginPath();
+    scaled.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
+    c.closePath();
+    c.strokeStyle = 'rgba(255,255,255,0.35)';
+    c.lineWidth = 1.2;
+    c.stroke();
+    // Top sparkle
+    const hPts = scaled.slice(0, Math.ceil(scaled.length / 2));
+    c.beginPath();
+    hPts.forEach(([x, y], i) => i === 0 ? c.moveTo(x, y) : c.lineTo(x, y));
+    c.closePath();
+    c.fillStyle = 'rgba(255,255,255,0.18)';
+    c.fill();
+}
+
+// Gem shape templates (normalised coords, -1..1 bounding box)
+const GEM_SHAPES = {
+    diamond:   [[ 0,-1],[0.6,-0.2],[0.35, 1],[-0.35, 1],[-0.6,-0.2]],
+    hexagon:   [[ 0,-1],[0.87,-0.5],[0.87,0.5],[ 0, 1],[-0.87,0.5],[-0.87,-0.5]],
+    marquise:  [[ 0,-1],[0.75,-0.25],[1, 0],[0.75,0.25],[0,-1],[-0.75,0.25],[-1,0],[-0.75,-0.25]],
+    teardrop:  [[ 0,-1],[0.65,-0.3],[0.55,0.4],[0, 1],[-0.55,0.4],[-0.65,-0.3]],
+    shield:    [[ 0,-1],[0.85,-0.3],[0.85, 0.4],[0, 1],[-0.85, 0.4],[-0.85,-0.3]],
+};
+
+// Fixed gem layout: [shape, x, y, size, colTop, colBot]
+const GEM_LAYOUT = [
+    ['diamond',  -85, -90, 28, '#a0ffa0', '#1a8c1a'],   // green top-left
+    ['hexagon',   80, -85, 24, '#80cfff', '#1a4aaa'],   // blue top-right
+    ['teardrop',   0, -110, 20, '#ffb0ff', '#aa1aaa'],   // pink top-centre
+    ['shield',   -95,  10, 22, '#ffd080', '#aa6600'],   // gold mid-left
+    ['marquise',  90,  15, 20, '#ff9090', '#aa1a1a'],   // red mid-right
+    ['diamond',  -50,  80, 18, '#c0ffd0', '#1a7a4a'],   // green bottom-left
+    ['hexagon',   50,  75, 18, '#b0b0ff', '#3030aa'],   // purple bottom-right
+    ['teardrop',   0,  95, 16, '#ffe0a0', '#aa7700'],   // amber bottom-centre
+];
+
+function drawBlendTest() {
+    const bc = document.getElementById('blendCanvas');
+    const CSS = 400;
+    const dpr = window.devicePixelRatio || 1;
+    bc.width  = CSS * dpr;
+    bc.height = CSS * dpr;
+    bc.style.width  = CSS + 'px';
+    bc.style.height = CSS + 'px';
+
+    const c   = bc.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, CSS, CSS);
+
+    const mode   = document.getElementById('blendModeSelect').value;
+    const gemAlpha  = parseFloat(document.getElementById('blendOpacity').value);
+    const bodyAlpha = parseFloat(document.getElementById('bodyOpacity').value);
+
+    const cx = CSS / 2, cy = CSS / 2;
+    const r  = CSS / 2 - 8;
+
+    // ── 1. Background (dark, so blend modes are visible) ──
+    c.fillStyle = '#0d0d0d';
+    c.fillRect(0, 0, CSS, CSS);
+
+    // ── 2. Body layer (character blob) ──
+    c.save();
+    c.globalAlpha = bodyAlpha;
+    const bodyGrad = c.createRadialGradient(cx - r*0.3, cy - r*0.3, r*0.1, cx, cy, r);
+    bodyGrad.addColorStop(0, lightenHex(P.color, 0.3));
+    bodyGrad.addColorStop(0.6, P.color);
+    bodyGrad.addColorStop(1, darkenHex(P.color, 0.25));
+    c.fillStyle = bodyGrad;
+    c.beginPath(); c.arc(cx, cy, r, 0, Math.PI*2); c.fill();
+    // Specular
+    const shine = c.createRadialGradient(cx - r*0.35, cy - r*0.38, 0, cx - r*0.1, cy - r*0.15, r*0.55);
+    shine.addColorStop(0, 'rgba(255,255,255,0.45)');
+    shine.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = shine; c.beginPath(); c.arc(cx, cy, r, 0, Math.PI*2); c.fill();
+    c.restore();
+
+    // ── 3. Gems layer (drawn with selected blend mode) ──
+    c.save();
+    c.globalCompositeOperation = mode;
+    c.globalAlpha = gemAlpha;
+    GEM_LAYOUT.forEach(([shape, gx, gy, sz, ct, cb]) => {
+        const pts = GEM_SHAPES[shape];
+        if (pts) drawGem(c, cx + gx, cy + gy, sz, pts, ct, cb);
+    });
+    c.restore();
+
+    // ── 4. Face overlay (normal mode, drawn on top) ──
+    c.save();
+    c.translate(cx, cy);
+    const sc  = r / GAME_R;
+    c.scale(sc, sc);
+    c.beginPath(); c.arc(0, 0, GAME_R, 0, Math.PI*2); c.clip();
+
+    const fs  = P.fs;
+    const ep  = eP();
+    const eyeSpc = ep.eyeSpacing * fs;
+    const eyeY_  = ep.eyeY * fs;
+    const eyeR_  = ep.eyeR * fs;
+    const et = P.eyeType;
+
+    if (et === 0) {
+        [-1, 1].forEach(side => {
+            c.save(); c.translate(side * eyeSpc, eyeY_);
+            c.beginPath(); c.arc(0, 0, eyeR_, 0, Math.PI*2);
+            c.fillStyle = '#fff'; c.fill(); c.clip();
+            c.fillStyle = '#1a1a1a'; c.beginPath(); c.arc(0, 0, eyeR_*0.9, 0, Math.PI*2); c.fill();
+            c.fillStyle = '#fff';
+            c.beginPath(); c.arc(-eyeR_*0.4, -eyeR_*0.4, eyeR_*0.35, 0, Math.PI*2); c.fill();
+            c.beginPath(); c.arc(-eyeR_*0.1, -eyeR_*0.6, eyeR_*0.15, 0, Math.PI*2); c.fill();
+            c.restore();
+        });
+    } else if (et === 6) {
+        [-1, 1].forEach(side => {
+            c.save(); c.translate(side * eyeSpc, eyeY_);
+            c.beginPath(); c.ellipse(0, 0, eyeR_, eyeR_*1.227, 0, 0, Math.PI*2);
+            c.fillStyle = '#fff'; c.fill(); c.clip();
+            c.fillStyle = '#1a1a1a';
+            c.beginPath(); c.ellipse(0, eyeR_*0.219, eyeR_*0.927, eyeR_*1.028, 0, 0, Math.PI*2); c.fill();
+            c.fillStyle = '#fff';
+            c.beginPath(); c.arc(eyeR_*0.353, -eyeR_*0.491, eyeR_*0.174, 0, Math.PI*2); c.fill();
+            c.beginPath(); c.arc(eyeR_*0.564, eyeR_*0.004, eyeR_*0.290, 0, Math.PI*2); c.fill();
+            c.restore();
+        });
+    } else if (et === 7) {
+        const img = imgs['eye2Idle'];
+        if (img && img.complete && img.naturalWidth > 0) {
+            const eyeW = eyeSpc * ep.eyeWidthMult * fs;
+            const vc = ep.eyeVCenter;
+            c.drawImage(img, -eyeW/2, eyeY_ - eyeW * vc, eyeW, eyeW);
+        }
+    } else {
+        const img = custEyeImgs[et];
+        const aspect = custEyeAspect[et] || 1;
+        const vc = ep.eyeVCenter;
+        if (img && img.complete && img.naturalWidth > 0) {
+            const eyeW = eyeSpc * ep.eyeWidthMult * fs;
+            const eyeH = eyeW * aspect;
+            c.drawImage(img, -eyeW/2, eyeY_ - eyeH * vc, eyeW, eyeH);
+        }
+    }
+
+    const mY_   = mY() * fs;
+    const mSiz_ = mSiz() * fs;
+    const lt    = P.lipType;
+    const ms    = P.mouthState;
+    let lipImg;
+    if (lt === 1) lipImg = ms === 'open' ? imgs['lip1Open'] : imgs['lip1Idle'];
+    else if (lt === 2) lipImg = ms === 'open' ? imgs['lip2Open'] : imgs['lip2Idle'];
+    else if (lt === 3) {
+        if (ms === 'open')  lipImg = imgs['lip3Open'];
+        else if (ms === 'idle2') lipImg = imgs['lip3Idle2'];
+        else lipImg = imgs['lip3Idle1'];
+    }
+    if (lipImg && lipImg.complete && lipImg.naturalWidth > 0) {
+        c.drawImage(lipImg, -mSiz_/2, mY_ - mSiz_*0.5, mSiz_, mSiz_);
+    }
+    c.restore();
+}
+
+// Wire up blend tester controls
+document.getElementById('blendModeSelect').addEventListener('change', drawBlendTest);
+
+['blendOpacity', 'bodyOpacity'].forEach(id => {
+    const slider = document.getElementById(id);
+    const valBox = document.getElementById(id + 'Val');
+    slider.addEventListener('input', () => { valBox.value = slider.value; drawBlendTest(); });
+    valBox.addEventListener('input', () => { slider.value = valBox.value; drawBlendTest(); });
+});
 
 // ─── INIT ─────────────────────────────────────────────────
 redrawAll();
