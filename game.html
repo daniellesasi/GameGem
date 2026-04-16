@@ -2988,7 +2988,7 @@ function draw() {
         {
             const lt = window.PLAYER_LIP_TYPE;
             const m  = player.anim.mouth; // 0=closed → 1=open
-            const cy = 24 * fs;
+            const cy = 27 * fs;
 
             let idleImg, openImg;
             if (lt === 2) { idleImg = lip2Idle; openImg = lip2Open; }
@@ -3584,7 +3584,7 @@ function renderPreviewFace(canvas) {
     }
 
     // ── Mouth (idle state) ──
-    const cy  = 24 * fs;
+    const cy  = 27 * fs;
     const lt  = window.PLAYER_LIP_TYPE;
     const idleImg = lt === 2 ? lip2Idle : lt === 3 ? lip3Idle1 : lip1Idle;
     if (idleImg && idleImg.complete && idleImg.naturalWidth > 0) {
