@@ -2876,7 +2876,7 @@ function draw() {
         const eyeAngle = Math.atan2(rawMouse.y - canvas.height/2, rawMouse.x - canvas.width/2);
         const pupilD   = 9 * fs;
         const eyeSpc   = (40 + player.anim.puff*3) * fs;
-        const eyeY     = -20 * fs;
+        const eyeY     = -31 * fs;
         const eyeR     = 36 * fs;
 
         function drawEye(side) {
@@ -2950,7 +2950,7 @@ function draw() {
                     const _ph = window._eye2HueFilter || 'none';
                     ctx.save();
                     if (_ph !== 'none') ctx.filter = _ph;
-                    const eyeW = eyeSpc * 4.8 * fs;
+                    const eyeW = eyeSpc * 1.7 * fs;
                     ctx.scale(1, 1 - blink);
                     ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * 0.5, eyeW, eyeW);
                     ctx.restore();
@@ -2986,7 +2986,7 @@ function draw() {
         {
             const lt = window.PLAYER_LIP_TYPE;
             const m  = player.anim.mouth; // 0=closed → 1=open
-            const cy = 58 * fs;
+            const cy = 24 * fs;
 
             let idleImg, openImg;
             if (lt === 2) { idleImg = lip2Idle; openImg = lip2Open; }
@@ -2997,13 +2997,13 @@ function draw() {
             } else { idleImg = lip1Idle; openImg = lip1Open; } // default = LIP1
 
             // Idle: larger than eye PNG (~211px) so lips dominate the face
-            const idleS = 215 * fs;
+            const idleS = 85 * fs;
             const idleA = Math.max(0, 1 - m * 3.5);
 
             // Open: sized so mouth is ~55% of face diameter, well below the eyes
             // cy pushed to 58*fs so the top of the dome clears the eye bottoms (at ~18*fs)
             const gi = coveragePercent / 100;
-            const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (78 + gi * 22) * fs;
+            const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (80 + gi * 22) * fs;
             const openS = baseOpen + player.anim.gulp * 14 * fs;
             // Organic wobble when wide open
             const wobble = m > 0.5 ? Math.sin(player.anim.time * 25) * 0.04 : 0;
@@ -3019,7 +3019,7 @@ function draw() {
             if (openA > 0.01 && openImg.complete && openImg.naturalWidth > 0) {
                 ctx.globalAlpha = openA;
                 // Anchor top of PNG just below eye-bottom (~18*fs); dome hangs down from there
-                ctx.drawImage(openImg, -openW / 2, 22 * fs, openW, openH);
+                ctx.drawImage(openImg, -openW / 2, -10 * fs, openW, openH);
             }
             ctx.restore();
         }
@@ -3535,7 +3535,7 @@ function renderPreviewFace(canvas) {
 
     // ── Eyes ──
     const eyeSpc = 40 * fs;
-    const eyeY   = -20 * fs;
+    const eyeY   = -31 * fs;
     const eyeR   = 36 * fs;
 
     const et = window.PLAYER_EYE_TYPE;
@@ -3543,7 +3543,7 @@ function renderPreviewFace(canvas) {
         // EYE2 PNG — exact same draw call as in-game
         if (eye2Idle.complete && eye2Idle.naturalWidth > 0) {
             if (window._eye2HueFilter && window._eye2HueFilter !== 'none') c.filter = window._eye2HueFilter;
-            const eyeW = eyeSpc * 4.8 * fs;
+            const eyeW = eyeSpc * 1.7 * fs;
             c.drawImage(eye2Idle, -eyeW / 2, eyeY - eyeW * 0.5, eyeW, eyeW);
             c.filter = 'none';
         }
@@ -3582,11 +3582,11 @@ function renderPreviewFace(canvas) {
     }
 
     // ── Mouth (idle state) ──
-    const cy  = 58 * fs;
+    const cy  = 24 * fs;
     const lt  = window.PLAYER_LIP_TYPE;
     const idleImg = lt === 2 ? lip2Idle : lt === 3 ? lip3Idle1 : lip1Idle;
     if (idleImg && idleImg.complete && idleImg.naturalWidth > 0) {
-        const idleS = 215 * fs;
+        const idleS = 85 * fs;
         c.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
     } else if (idleImg && !idleImg.complete) {
         // Image still loading — retry once it's ready
