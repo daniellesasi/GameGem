@@ -714,7 +714,7 @@
 // CUSTOMIZER GLOBALS
 // ─────────────────────────────────────────────
 window.PLAYER_COLOR    = localStorage.getItem('avatarColor') || '#ff83df';
-window.PLAYER_EYE_TYPE = 2;         // 0=default, 1=goggles, 2=eyes1, 3=eyes2
+window.PLAYER_EYE_TYPE = 6;         // 1=goggles, 6=anime (default), 7=EYE2 PNG
 window.PLAYER_LIP_TYPE = 1;         // 1=LIP1(png), 2=LIP2(png), 3=LIP3(png)
 
 // Compute hue-rotate filter for EYE2 iris — shifts the base blue (#8dc1ff, ~210°) to player color hue
@@ -2877,9 +2877,21 @@ function draw() {
         const fs       = 1.1 + coveragePercent/150 + player.anim.puff*0.05;
         const eyeAngle = Math.atan2(rawMouse.y - canvas.height/2, rawMouse.x - canvas.width/2);
         const pupilD   = 9 * fs;
-        const eyeSpc   = (40 + player.anim.puff*3) * fs;
-        const eyeY     = -31 * fs;
-        const eyeR     = 36 * fs;
+        // Per-eye-type position/size params
+        const _EP = [
+            { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 0 default
+            { spc: 90.0, y: -29.5, r: 36.0, wm: 1.70, vc: 0.50 }, // 1 goggles
+            { spc: 90.0, y: -34.0, r: 36.0, wm: 1.70, vc: 0.50 }, // 2 cute
+            { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 3 (fallback)
+            { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 4 (fallback)
+            { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 5 (fallback)
+            { spc: 35.0, y: -35.0, r: 33.0, wm: 1.70, vc: 0.50 }, // 6 anime
+            { spc: 73.6, y: -45.6, r: 36.0, wm: 1.70, vc: 0.50 }, // 7 eye2 png
+        ];
+        const _ep    = _EP[window.PLAYER_EYE_TYPE] || _EP[0];
+        const eyeSpc = (_ep.spc + player.anim.puff*3) * fs;
+        const eyeY   = _ep.y * fs;
+        const eyeR   = _ep.r * fs;
 
         function drawEye(side) {
             ctx.save();
@@ -2952,9 +2964,9 @@ function draw() {
                     const _ph = window._eye2HueFilter || 'none';
                     ctx.save();
                     if (_ph !== 'none') ctx.filter = _ph;
-                    const eyeW = eyeSpc * 1.7 * fs;
+                    const eyeW = eyeSpc * _ep.wm * fs;
                     ctx.scale(1, 1 - blink);
-                    ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * 0.5, eyeW, eyeW);
+                    ctx.drawImage(eyeDir, -eyeW / 2, eyeY - eyeW * _ep.vc, eyeW, eyeW);
                     ctx.restore();
                 } else { drawEye(-1); drawEye(1); }
             } else {
@@ -2969,60 +2981,71 @@ function draw() {
         } else {
             const eyeImg = custEyeImages[window.PLAYER_EYE_TYPE];
             if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
-                const eyeW = eyeSpc * 1.7 * fs;
+                const eyeW = eyeSpc * _ep.wm * fs;
                 const eyeH = eyeW * custEyeAspect[window.PLAYER_EYE_TYPE];
-                ctx.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * custEyeVCenter[window.PLAYER_EYE_TYPE], eyeW, eyeH);
+                ctx.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * _ep.vc, eyeW, eyeH);
             } else {
                 drawEye(-1); drawEye(1);
             }
         }
 
-        ctx.fillStyle = 'rgba(255,130,100,0.45)';
-        const blushX = eyeSpc*1.05 + player.anim.puff*12;
-        ctx.beginPath();
-        ctx.ellipse(-blushX, eyeY+52*fs, 15*fs, 9*fs, 0,0,6.28);
-        ctx.ellipse( blushX, eyeY+52*fs, 15*fs, 9*fs, 0,0,6.28);
-        ctx.fill();
-
         // ── PNG mouth ────────────────────────────────────────────────────
         {
             const lt = window.PLAYER_LIP_TYPE;
             const m  = player.anim.mouth; // 0=closed → 1=open
-            const cy = 27 * fs;
 
-            let idleImg, openImg;
-            if (lt === 2) { idleImg = lip2Idle; openImg = lip2Open; }
-            else if (lt === 3) {
-                // LIP3: tongue lazily flips side every ~2s
-                idleImg = (Math.floor(player.anim.time / 130) % 2 === 0) ? lip3Idle1 : lip3Idle2;
-                openImg = lip3Open;
-            } else { idleImg = lip1Idle; openImg = lip1Open; } // default = LIP1
-
-            // Idle: larger than eye PNG (~211px) so lips dominate the face
-            const idleS = 85 * fs;
+            // Per-lip-type, per-state mouth position and size
+            const _LP = {
+                1: { idle: { cy: 25.5, size: 53  }, open: { cy: 37.9, size: 125 } },
+                2: { idle: { cy: 25.0, size: 102 }, open: { cy: 36.5, size: 130 } },
+                3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 27.0, size: 85 }, open: { cy: 37.9, size: 123 } },
+            };
+            const _lp  = _LP[lt] || _LP[1];
             const idleA = Math.max(0, 1 - m * 3.5);
+            const openA = Math.min(1, m * 2);
 
-            // Open: sized so mouth is ~55% of face diameter, well below the eyes
-            // cy pushed to 58*fs so the top of the dome clears the eye bottoms (at ~18*fs)
-            const gi = coveragePercent / 100;
-            const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (80 + gi * 22) * fs;
-            const openS = baseOpen + player.anim.gulp * 14 * fs;
-            // Organic wobble when wide open
-            const wobble = m > 0.5 ? Math.sin(player.anim.time * 25) * 0.04 : 0;
-            const openW  = openS * (1 - wobble);
-            const openH  = openS * (1 + wobble);
-            const openA  = Math.min(1, m * 2);
+            let openImg;
+            if (lt === 2) { openImg = lip2Open; }
+            else if (lt === 3) { openImg = lip3Open; }
+            else { openImg = lip1Open; }
 
             ctx.save();
-            if (idleA > 0.01 && idleImg.complete && idleImg.naturalWidth > 0) {
-                ctx.globalAlpha = idleA;
-                ctx.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
+
+            // Idle frame(s)
+            if (idleA > 0.01) {
+                if (lt === 3) {
+                    // LIP3: tongue lazily flips between idle1/idle2 each with its own position+size
+                    const useIdle2 = (Math.floor(player.anim.time / 130) % 2 !== 0);
+                    const lipState = useIdle2 ? (_lp.idle2 || _lp.idle) : _lp.idle;
+                    const idleImg  = useIdle2 ? lip3Idle2 : lip3Idle1;
+                    if (idleImg.complete && idleImg.naturalWidth > 0) {
+                        const s = lipState.size * fs;
+                        ctx.globalAlpha = idleA;
+                        ctx.drawImage(idleImg, -s / 2, lipState.cy * fs - s * 0.5, s, s);
+                    }
+                } else {
+                    const idleImg = lt === 2 ? lip2Idle : lip1Idle;
+                    if (idleImg.complete && idleImg.naturalWidth > 0) {
+                        const s = _lp.idle.size * fs;
+                        ctx.globalAlpha = idleA;
+                        ctx.drawImage(idleImg, -s / 2, _lp.idle.cy * fs - s * 0.5, s, s);
+                    }
+                }
             }
+
+            // Open frame — size is dynamic (grows with coverage), Y is per-lip-type
             if (openA > 0.01 && openImg.complete && openImg.naturalWidth > 0) {
+                const gi = coveragePercent / 100;
+                const baseOpen = coveragePercent >= 70 ? (100 + gi * 20) * fs : (80 + gi * 22) * fs;
+                const openS = baseOpen + player.anim.gulp * 14 * fs;
+                const wobble = m > 0.5 ? Math.sin(player.anim.time * 25) * 0.04 : 0;
+                const openW  = openS * (1 - wobble);
+                const openH  = openS * (1 + wobble);
+                const openCy = _lp.open.cy * fs;
                 ctx.globalAlpha = openA;
-                // Anchor top of PNG just below eye-bottom (~18*fs); dome hangs down from there
-                ctx.drawImage(openImg, -openW / 2, -10 * fs, openW, openH);
+                ctx.drawImage(openImg, -openW / 2, openCy - openH * 0.5, openW, openH);
             }
+
             ctx.restore();
         }
 
@@ -3473,8 +3496,6 @@ function drawAnimeLips(ctx, fs) {
 // ─────────────────────────────────────────────
 
 const rawSvgGoggles = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 254.61 76.93"><path d="M244.52,21.88C234.77,8.94,213.96,0,189.86,0s-44.53,8.78-54.39,21.53c-6.24-4.19-11.78-2.18-15.82.99C110.1,9.24,89.02,0,64.52,0,38.28,0,15.94,10.6,7.53,25.42h0s-7.53,0-7.53,0v25.69h7.31c8.23,15.04,30.73,25.83,57.22,25.83,33.46,0,60.58-17.22,60.58-38.47,0-1.49-.15-2.95-.41-4.4,1.72-.65,3.43-.71,5.06-.38-.31,1.56-.48,3.15-.48,4.77,0,21.24,27.12,38.47,60.58,38.47,27.88,0,51.34-11.96,58.4-28.24h6.36v-26.82h-10.09ZM121.37,39.72c-2.08,13.74-26.32,22.89-54.14,20.44-12.13-1.07-22.94-4.17-31.1-8.46h-.02s0,0,0,0c-2.67-1.41-5.05-2.95-7.11-4.59h0s-.03-.03-.03-.03c-2.03-1.62-3.75-3.34-5.08-5.12h-.01s0-.01,0-.01c-2.62-3.5-3.81-7.27-3.23-11.08,2.08-13.74,26.32-22.89,54.14-20.44,8.96.79,17.18,2.69,24.16,5.35l1.21-.42,7.11,3.63-.73.26c2.28,1.24,4.34,2.57,6.15,3.98h0s.02.02.02.02c6.24,4.86,9.56,10.62,8.67,16.49ZM189.01,57.95c-17.8,2.79-34.65.39-45.06-5.5h0s-.05-.03-.05-.03c-.88-.5-1.72-1.03-2.51-1.58l-1.25-.78.11-.05c-3.26-2.55-5.51-5.57-6.42-8.97-3.66-13.55,15.12-27.94,41.93-32.14,16.59-2.6,32.36-.69,42.85,4.35l.61-.29,3.14,2.37c1.26.81,2.41,1.67,3.43,2.58h0s0,0,0,0c2.57,2.31,4.35,4.96,5.14,7.89,3.66,13.55-15.12,27.94-41.93,32.14Z"/><path d="M28.97,47.07l-5.08-5.12c1.34,1.79,3.05,3.5,5.08,5.12Z" style="fill:#6f78a5;"/><path d="M74.78,10.41c-27.82-2.45-52.05,6.7-54.14,20.44-.58,3.81.62,7.58,3.23,11.08L98.94,15.76c-6.98-2.67-15.21-4.57-24.16-5.35Z" style="fill:#6f78a5;"/><path d="M112.71,23.23l3.56,3.38-75.25,27.23-4.89-2.15c8.16,4.3,18.97,7.4,31.1,8.46,27.82,2.45,52.05-6.7,54.14-20.44.89-5.87-2.42-11.63-8.67-16.49Z" style="fill:#6f78a5;"/><path d="M106.54,19.23L29.01,47.1c2.06,1.64,4.44,3.18,7.11,4.59l76.57-28.47c-1.81-1.41-3.87-2.74-6.15-3.98Z" style="fill:#6f78a5;"/><path d="M225.8,17.92l-81.85,34.53c10.4,5.89,27.26,8.29,45.06,5.5,26.81-4.2,45.59-18.59,41.93-32.14-.79-2.93-2.57-5.58-5.14-7.89Z" style="fill:#6f78a5;"/><path d="M175.77,8.9c-26.81,4.2-45.59,18.59-41.93,32.14.92,3.4,3.16,6.42,6.42,8.97L218.62,13.25c-10.49-5.04-26.26-6.95-42.85-4.35Z" style="fill:#6f78a5;"/><path d="M143.9,52.42l-2.51-1.58c.79.55,1.63,1.08,2.51,1.58Z" style="fill:#6f78a5;"/><path d="M222.37,15.33l3.43,2.58c-1.02-.92-2.17-1.78-3.43-2.58Z" style="fill:#6f78a5;"/><polygon points="107.26 18.97 100.16 15.34 98.94 15.76 23.88 41.93 23.87 41.93 23.89 41.95 28.97 47.07 29 47.1 29.01 47.1 106.54 19.23 107.26 18.97" style="fill:#e2e2e2;"/><polygon points="116.27 26.62 112.71 23.23 112.69 23.22 112.69 23.22 36.12 51.69 36.12 51.69 36.14 51.7 41.02 53.84 116.27 26.62" style="fill:#e2e2e2;"/><polygon points="225.8 17.92 225.8 17.92 222.37 15.33 219.23 12.96 218.62 13.25 140.26 50.01 140.14 50.06 141.39 50.85 143.9 52.42 143.95 52.45 143.95 52.45 225.8 17.92 225.8 17.92" style="fill:#e2e2e2;"/></svg>`;
-const rawSvgCuteEyes = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 298.08 199.44"><path d="M78.52,23.2c-30.44,0-55.11,30.27-55.11,67.6s24.68,67.6,55.11,67.6c.3,0,.59-.02.89-.03-27.76-.58-50.11-25.71-50.11-56.65s22.87-56.68,51.09-56.68,51.09,25.38,51.09,56.68c0,4.34-.45,8.55-1.28,12.61,2.22-7.33,3.44-15.26,3.44-23.53,0-37.34-24.68-67.6-55.11-67.6Z" fill="#1a1a1a"/><path d="M152.93,101.72c0-31.3,22.87-56.68,51.09-56.68s51.09,25.38,51.09,56.68c0,3.4-.29,6.73-.8,9.96,1.74-6.58,2.69-13.6,2.69-20.89,0-37.34-24.68-67.6-55.11-67.6s-55.11,30.27-55.11,67.6,24.68,67.6,55.11,67.6c.34,0,.67-.02,1.01-.03-27.7-.66-49.97-25.76-49.97-56.65Z" fill="#1a1a1a"/><path d="M80.39,45.04c-28.22,0-51.09,25.38-51.09,56.68s22.35,56.07,50.11,56.65c.33,0,.65.03.98.03,24.31,0,44.64-18.84,49.81-44.07.83-4.06,1.28-8.27,1.28-12.61,0-31.3-22.87-56.68-51.09-56.68ZM129.12,90.99c0,8.83-7.16,15.99-15.99,15.99s-15.99-7.16-15.99-15.99,7.16-15.99,15.99-15.99,15.99,7.16,15.99,15.99ZM92.48,60.13c5.29,0,9.58,4.29,9.58,9.58s-4.29,9.58-9.58,9.58-9.58-4.29-9.58-9.58,4.29-9.58,9.58-9.58Z" fill="#1a1a1a"/><path d="M255.11,101.72c0-31.3-22.87-56.68-51.09-56.68s-51.09,25.38-51.09,56.68,22.27,55.98,49.97,56.65c.37,0,.74.03,1.12.03,25.15,0,46.04-20.17,50.29-46.72.52-3.24.8-6.56.8-9.96ZM244.85,80.31c5.9,6.57,5.35,16.68-1.22,22.58-6.57,5.9-16.68,5.35-22.58-1.22s-5.35-16.68,1.22-22.58c6.57-5.9,16.68-5.35,22.58,1.22ZM214.96,56.6c3.94-3.53,9.99-3.21,13.53.73,3.53,3.94,3.21,9.99-.73,13.53s-9.99,3.21-13.53-.73-3.21-9.99.73-13.53Z" fill="#1a1a1a"/><circle cx="92.48" cy="69.71" r="9.58" fill="#fff"/><circle cx="113.13" cy="90.99" r="15.99" fill="#fff"/><path d="M227.75,70.86c3.94-3.53,4.26-9.59.73-13.53-3.53-3.94-9.59-4.26-13.53-.73-3.94,3.53-4.26,9.59-.73,13.53s9.59,4.26,13.53.73Z" fill="#fff"/><circle cx="232.95" cy="90.99" r="15.99" transform="translate(25.21 230.24) rotate(-55.17)" fill="#fff"/></svg>`;
-const rawSvgSmallEyes = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 215.8 115.27"><path d="M195.07,73.51c-7.3-2.4-14.36-4.1-21.09-5.24.02.39.02.77.02,1.16,0,12.39-8.28,22.43-18.49,22.43-8.06,0-14.91-6.26-17.44-14.98-3.68-1.72-6.66-4.9-8.38-8.88-4.49.71-8.5,1.59-11.98,2.49-.11-1.61-.17-3.25-.17-4.92,0-28.18,15.23-49.67,37.99-49.7-.02,0-.04,0-.05,0-22.79,0-38.05,21.5-38.05,49.7s16.32,49.7,39.11,49.7c20.81,0,36.04-17.29,38.54-41.76ZM154.41,101.68c13.74-.05,24.37-9.84,24.37-9.84,0,0-6.56,18.2-22.25,19.36-15.69,1.16-23.04-18.45-23.04-18.45,0,0,7.18,8.97,20.92,8.92Z" fill="#8dc1ff"/><path d="M172.12,2.09c-35.36-10.25-48.84,20.47-48.84,20.47,27.29-26.23,53.53-14.69,68.19.04s14.64,42.89,14.64,42.89c9.25-7.37,9.7-20.4,9.7-20.4,0,0-8.31-32.75-43.68-43Z" fill="#000"/><path d="M117.53,65.57c0,1.66.06,3.3.17,4.92,3.48-.9,7.5-1.78,11.98-2.49-1.01-2.35-1.6-4.98-1.6-7.76,0-9.97,7.3-18.05,16.3-18.05,4.28,0,8.16,1.84,11.07,4.83.02,0,.04,0,.05,0,9.89,0,17.96,9.42,18.46,21.26,6.74,1.14,13.79,2.83,21.09,5.24.04.01.07.02.11.04.24-2.34.37-4.75.37-7.22,0-28.2-17.17-50.46-39.97-50.46-.02,0-.04,0-.06,0-22.76.04-37.99,21.52-37.99,49.7Z" fill="#000"/><path d="M155.51,47.01s-.04,0-.05,0c3.21,3.3,5.23,7.99,5.23,13.22,0,9.97-7.3,18.05-16.3,18.05-2.24,0-4.37-.5-6.32-1.41,2.53,8.73,9.38,14.98,17.44,14.98,10.21,0,18.49-10.04,18.49-22.43,0-.39,0-.78-.02-1.16-.5-11.84-8.57-21.26-18.46-21.26Z" fill="#000"/><path d="M160.68,60.24c0-5.23-2.02-9.92-5.23-13.22-2.91-2.99-6.79-4.83-11.07-4.83-9,0-16.3,8.08-16.3,18.05,0,2.78.58,5.41,1.6,7.76,1.72,3.98,4.7,7.17,8.38,8.88,1.94.91,4.08,1.41,6.32,1.41,9,0,16.3-8.08,16.3-18.05Z" fill="#fefefe"/><path d="M156.53,111.2c15.69-1.16,22.25-19.36,22.25-19.36,0,0-10.63,9.79-24.37,9.84s-20.92-8.92-20.92-8.92c0,0,7.36,19.6,23.04,18.45Z" fill="#fefefe"/><path d="M98.37,65.57c0-28.2-15.26-49.7-38.05-49.7-.02,0-.04,0-.05,0,22.76.04,37.99,21.52,37.99,49.7,0,1.66-.06,3.3-.17,4.92-3.48-.9-7.5-1.78-11.98-2.49-1.72,3.98-4.7,7.17-8.38,8.88-2.53,8.73-9.38,14.98-17.44,14.98-10.21,0-18.49-10.04-18.49-22.43,0-.39,0-.78.02-1.16-6.74,1.14-13.79,2.83-21.09,5.24,2.5,24.47,17.73,41.76,38.54,41.76,22.79,0,39.11-21.5,39.11-49.7ZM37.02,91.84s10.63,9.79,24.37,9.84,20.92-8.92,20.92-8.92c0,0-7.36,19.6-23.04,18.45-15.69-1.16-22.25-19.36-22.25-19.36Z" fill="#8dc1ff"/><path d="M24.33,22.61c14.65-14.73,40.9-26.28,68.19-.04,0,0-13.48-30.73-48.84-20.47C8.31,12.35,0,45.1,0,45.1c0,0,.44,13.03,9.7,20.4,0,0-.01-28.16,14.64-42.89Z" fill="#000"/><path d="M60.28,47.01s.04,0,.05,0c2.91-2.99,6.79-4.83,11.07-4.83,9,0,16.3,8.08,16.3,18.05,0,2.78-.58,5.41-1.6,7.76,4.49.71,8.5,1.59,11.98,2.49.11-1.61.17-3.25.17-4.92,0-28.18-15.23-49.67-37.99-49.7-.02,0-.04,0-.06,0-22.79,0-39.97,22.26-39.97,50.46,0,2.47.13,4.87.37,7.22.04-.01.07-.02.11-.04,7.3-2.4,14.36-4.1,21.09-5.24.5-11.84,8.57-21.26,18.46-21.26Z" fill="#000"/><path d="M55.11,60.24c0-5.23,2.02-9.92,5.23-13.22-.02,0-.04,0-.05,0-9.89,0-17.96,9.42-18.46,21.26-.02.39-.02.77-.02,1.16,0,12.39,8.28,22.43,18.49,22.43,8.06,0,14.91-6.26,17.44-14.98-1.94.91-4.08,1.41-6.32,1.41-9,0-16.3-8.08-16.3-18.05Z" fill="#000"/><path d="M71.41,42.18c-4.28,0-8.16,1.84-11.07,4.83-3.21,3.3-5.23,7.99-5.23,13.22,0,9.97,7.3,18.05,16.3,18.05,2.24,0,4.37-.5,6.32-1.41,3.68-1.72,6.66-4.9,8.38-8.88,1.01-2.35,1.6-4.98,1.6-7.76,0-9.97-7.3-18.05-16.3-18.05Z" fill="#fefefe"/><path d="M82.31,92.75s-7.18,8.97-20.92,8.92-24.37-9.84-24.37-9.84c0,0,6.56,18.2,22.25,19.36,15.69,1.16,23.04-18.45,23.04-18.45Z" fill="#fefefe"/></svg>`;
 const rawSvgNewEyes = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 603.85 352.48"><ellipse cx="142.47" cy="174.75" rx="142.47" ry="174.75" style="fill:#fff;"/><ellipse cx="461.38" cy="174.75" rx="142.47" ry="174.75" style="fill:#fff;"/><ellipse cx="144.47" cy="204.72" rx="132.07" ry="146.51"/><ellipse cx="462.74" cy="205.97" rx="132.07" ry="146.51"/><circle cx="202.27" cy="129.54" r="24.76" style="fill:#fff;"/><circle cx="225.32" cy="202.99" r="41.33" style="fill:#fff;"/><circle cx="511.7" cy="104.78" r="24.76" style="fill:#fff;"/><circle cx="541.68" cy="175.25" r="41.33" style="fill:#fff;"/></svg>`;
 
 const rawSvgLip1 = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54.78 54.78"><circle cx="27.39" cy="27.39" r="13.7" style="fill:#7f2222;"/></svg>`;
@@ -3484,14 +3505,12 @@ const rawSvgLip3 = `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www
 const encodeSVG = (s) => `url('data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}')`;
 
 const EYE_OPTIONS = [
-    encodeSVG(rawSvgGoggles),
-    encodeSVG(rawSvgCuteEyes),
-    encodeSVG(rawSvgSmallEyes),
-    encodeSVG(rawSvgNewEyes),
-    `url('EYE2_IDLE.png')`   // index 4 = EYE2 PNG
+    encodeSVG(rawSvgGoggles),   // index 0 = Goggles
+    encodeSVG(rawSvgNewEyes),   // index 1 = Anime (default)
+    `url('EYE2_IDLE.png')`      // index 2 = EYE2 PNG
 ];
 // Maps carousel index → window.PLAYER_EYE_TYPE
-const EYE_TYPE_MAP = [1, 2, 3, 6, 7];
+const EYE_TYPE_MAP = [1, 6, 7];
 
 const LIP_OPTIONS = [
     `url('LIP1_IDLE.png')`,  // index 0 = LIP1 (default)
@@ -3502,7 +3521,7 @@ const LIP_OPTIONS = [
 const LIP_TYPE_MAP = [1, 2, 3];
 
 let currentColor = localStorage.getItem('avatarColor') || CUST_COLORS[0];
-let currentEyeIndex = parseInt(localStorage.getItem('avatarEyeIndex') || '1');
+let currentEyeIndex = Math.min(parseInt(localStorage.getItem('avatarEyeIndex') || '1'), EYE_OPTIONS.length - 1);
 let currentLipIndex = parseInt(localStorage.getItem('avatarLipIndex') || '0');
 
 function switchTab(tabIndex) {
@@ -3537,18 +3556,29 @@ function renderPreviewFace(canvas) {
     c.scale(sc, sc);     // everything drawn below is in game-exact pixel coordinates
 
     // Game constants at game-start (coveragePercent=0, puff=0)
-    const fs     = 1.1;
-    const eyeSpc = 40 * fs;
-    const eyeY   = -31 * fs;
-    const eyeR   = 36 * fs;
+    const fs   = 1.1;
+    const _EP2 = [
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 0 default
+        { spc: 90.0, y: -29.5, r: 36.0, wm: 1.70, vc: 0.50 }, // 1 goggles
+        { spc: 90.0, y: -34.0, r: 36.0, wm: 1.70, vc: 0.50 }, // 2 cute
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 3 (fallback)
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 4 (fallback)
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 }, // 5 (fallback)
+        { spc: 35.0, y: -35.0, r: 33.0, wm: 1.70, vc: 0.50 }, // 6 anime
+        { spc: 73.6, y: -45.6, r: 36.0, wm: 1.70, vc: 0.50 }, // 7 eye2 png
+    ];
+    const _ep2   = _EP2[window.PLAYER_EYE_TYPE] || _EP2[0];
+    const eyeSpc = _ep2.spc * fs;
+    const eyeY   = _ep2.y * fs;
+    const eyeR   = _ep2.r * fs;
 
     const et = window.PLAYER_EYE_TYPE;
     if (et === 7) {
         // EYE2 PNG — identical draw call to in-game
         if (eye2Idle.complete && eye2Idle.naturalWidth > 0) {
             if (window._eye2HueFilter && window._eye2HueFilter !== 'none') c.filter = window._eye2HueFilter;
-            const eyeW = eyeSpc * 1.7 * fs;
-            c.drawImage(eye2Idle, -eyeW / 2, eyeY - eyeW * 0.5, eyeW, eyeW);
+            const eyeW = eyeSpc * _ep2.wm * fs;
+            c.drawImage(eye2Idle, -eyeW / 2, eyeY - eyeW * _ep2.vc, eyeW, eyeW);
             c.filter = 'none';
         }
     } else if (et === 6) {
@@ -3577,18 +3607,25 @@ function renderPreviewFace(canvas) {
     } else {
         const eyeImg = custEyeImages[et];
         if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
-            const eyeW = eyeSpc * 1.7 * fs;
+            const eyeW = eyeSpc * _ep2.wm * fs;
             const eyeH = eyeW * custEyeAspect[et];
-            c.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * custEyeVCenter[et], eyeW, eyeH);
+            c.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * _ep2.vc, eyeW, eyeH);
         }
     }
 
     // ── Mouth (idle state) ──
-    const cy  = 27 * fs;
     const lt  = window.PLAYER_LIP_TYPE;
+    const _LP2 = {
+        1: { idle: { cy: 25.5, size: 53  } },
+        2: { idle: { cy: 25.0, size: 102 } },
+        3: { idle: { cy: 13.5, size: 132 }, idle2: { cy: 27.0, size: 85 } },
+    };
+    const _lp2 = _LP2[lt] || _LP2[1];
     const idleImg = lt === 2 ? lip2Idle : lt === 3 ? lip3Idle1 : lip1Idle;
     if (idleImg && idleImg.complete && idleImg.naturalWidth > 0) {
-        const idleS = 85 * fs;
+        const lipState = _lp2.idle;
+        const idleS = lipState.size * fs;
+        const cy    = lipState.cy * fs;
         c.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
     } else if (idleImg && !idleImg.complete) {
         idleImg.onload = () => renderPreviewFace(canvas);
