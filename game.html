@@ -651,6 +651,7 @@
     <!-- ── CUSTOMIZER SCREEN ── -->
     <div id="customizer-overlay">
         <div class="top-section">
+            <div id="stage-label" style="font-size:clamp(9px,2vw,12px);letter-spacing:3px;opacity:0.6;margin-bottom:4px;text-transform:uppercase;font-family:'Montserrat',sans-serif;font-weight:700;color:white;text-align:center"></div>
             <button class="play-btn" onclick="startGame()">PLAY</button>
         </div>
 
@@ -4236,6 +4237,19 @@ function renderNecklaceMap() {
             }
         }
 
+        // Stage number label (always shown, except on locked stages)
+        {
+            const b = getGemBounds(gem);
+            const lx = b.cx, ly = b.maxY + 11;
+            if (isLocked) {
+                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7" font-family="Montserrat,sans-serif" font-weight="700" fill="rgba(255,255,255,0.25)" letter-spacing="0.5">${stageNum}</text>`;
+            } else if (completed) {
+                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7" font-family="Montserrat,sans-serif" font-weight="700" fill="rgba(255,255,255,0.55)" letter-spacing="0.5">${stageNum}</text>`;
+            } else {
+                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="8" font-family="Montserrat,sans-serif" font-weight="900" fill="white" letter-spacing="0.5">${stageNum}</text>`;
+            }
+        }
+
         // Completed checkmark badge
         if (completed) {
             const b = getGemBounds(gem);
@@ -4284,9 +4298,18 @@ function renderNecklaceMap() {
 
 let playingStage = 0; // tracks which stage the player is currently playing
 
+function _updateStageLabel() {
+    const el = document.getElementById('stage-label');
+    if (!el) return;
+    const stageN = playingStage >= 1 ? playingStage : currentStage;
+    const gemName = (stageN >= 1 && stageN <= NECKLACE_GEMS.length) ? NECKLACE_GEMS[stageN - 1].name : '';
+    el.textContent = gemName ? `Stage ${stageN}  ·  ${gemName}` : `Stage ${stageN}`;
+}
+
 function startStage(stageNum) {
     if (stageNum > currentStage) return; // locked
     playingStage = stageNum;
+    _updateStageLabel();
     document.getElementById('main-menu').classList.remove('visible');
     document.getElementById('customizer-overlay').style.display = 'flex';
     requestAnimationFrame(() => renderPreviewFace(document.getElementById('preview-face-canvas')));
@@ -4294,6 +4317,7 @@ function startStage(stageNum) {
 
 function openCustomizer() {
     playingStage = currentStage;
+    _updateStageLabel();
     document.getElementById('main-menu').classList.remove('visible');
     document.getElementById('customizer-overlay').style.display = 'flex';
     // Render on next frame so the canvas has layout dimensions
