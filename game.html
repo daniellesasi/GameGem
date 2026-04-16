@@ -246,6 +246,8 @@
         .carousel-item.prev { transform: translateX(-100px) scale(0.85); z-index: 1; opacity: 0.4; filter: brightness(0.5); pointer-events: auto; }
         .carousel-item.next { transform: translateX(100px) scale(0.85); z-index: 1; opacity: 0.4; filter: brightness(0.5); pointer-events: auto; }
         .carousel-item.hidden { transform: translateX(0) scale(0.5); z-index: 0; opacity: 0; filter: brightness(0); pointer-events: none; }
+        /* Lip PNGs are square — give them a taller box so they're not squashed */
+        #lip-carousel .carousel-item { width: 90px; height: 90px; }
         .bottom-nav { display: flex; align-items: center; justify-content: center; gap: 20px; width: 100%; }
         .custom-nav-pill {
             display: flex; align-items: center; justify-content: space-between;
@@ -3597,6 +3599,11 @@ function renderPreviewFace(canvas) {
 }
 
 function updateCharacterVisuals() {
+    // Sync type globals from carousel selections so preview reflects current choice
+    window.PLAYER_EYE_TYPE = EYE_TYPE_MAP[currentEyeIndex];
+    window.PLAYER_LIP_TYPE = LIP_TYPE_MAP[currentLipIndex];
+    window.PLAYER_COLOR    = currentColor;
+    _updateEye2HueFilter();
     document.getElementById('main-body').style.backgroundColor = currentColor;
     document.getElementById('refl-body').style.backgroundColor = currentColor;
     // Render face on canvas — identical coordinates to the in-game character
@@ -4272,6 +4279,7 @@ function startStage(stageNum) {
     playingStage = stageNum;
     document.getElementById('main-menu').classList.remove('visible');
     document.getElementById('customizer-overlay').style.display = 'flex';
+    requestAnimationFrame(() => renderPreviewFace(document.getElementById('preview-face-canvas')));
 }
 
 function openCustomizer() {
