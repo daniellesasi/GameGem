@@ -79,12 +79,8 @@
         }
         #win-ui-top {
             position: relative; z-index: 2;
-            padding: max(env(safe-area-inset-top, 0px), 28px) 24px 0;
-        }
-        #win-ui-bottom {
-            position: relative; z-index: 2;
-            padding: 0 24px max(env(safe-area-inset-bottom, 0px), 28px);
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            padding: max(env(safe-area-inset-top, 0px), 28px) 24px 20px;
+            display: flex; flex-direction: column; align-items: center; gap: 6px;
         }
         #win-gem-name {
             font-size: clamp(18px, 5vw, 30px); letter-spacing: 4px;
@@ -716,11 +712,9 @@
     <div id="win-overlay">
         <canvas id="win-anim-canvas"></canvas>
         <div id="win-ui-top">
-            <button onclick="returnToMenuAfterGame()">CONTINUE</button>
-        </div>
-        <div id="win-ui-bottom">
             <div id="win-gem-name"></div>
             <div id="win-stats"></div>
+            <button onclick="returnToMenuAfterGame()">CONTINUE</button>
         </div>
     </div>
 
@@ -1470,10 +1464,11 @@ function _joystickUpdateMouse() {
         rawMouse.x = canvas.width  / 2;
         rawMouse.y = canvas.height / 2;
     } else {
-        // Fixed-distance target in stick direction → constant speed regardless of deflection
+        // Analog speed: deflection ratio (0→1) maps to target distance (0→360px)
         const nx = dx / dist, ny = dy / dist;
-        rawMouse.x = canvas.width  / 2 + nx * 180;
-        rawMouse.y = canvas.height / 2 + ny * 180;
+        const speed = Math.min(dist / JOYSTICK_RADIUS, 1) * 360;
+        rawMouse.x = canvas.width  / 2 + nx * speed;
+        rawMouse.y = canvas.height / 2 + ny * speed;
     }
 }
 
