@@ -4323,14 +4323,6 @@ function renderNecklaceMap() {
 
         // Stage number label
 
-        // Completed checkmark badge
-        if (completed) {
-            const b = getGemBounds(gem);
-            const cx = b.cx, cy = b.minY - 10;
-            const r = 8;
-            svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="rgba(255,255,255,0.92)"/>`;
-            svg += `<polyline points="${cx - r*0.45},${cy} ${cx - r*0.1},${cy + r*0.42} ${cx + r*0.5},${cy - r*0.4}" fill="none" stroke="#2aa87a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`;
-        }
 
         svg += `</g>`;
 
