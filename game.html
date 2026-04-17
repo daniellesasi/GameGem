@@ -3945,32 +3945,65 @@ function _drawWinFrame(ts) {
     c.beginPath(); c.ellipse(charCX, floorY, caustRx, caustRy, 0, 0, Math.PI * 2); c.fill();
     c.restore();
 
-    // Mirror reflection — flip around floorY, clip to below
+    // Mirror reflection — clip below floorY, flip canvas around floorY
     c.save();
+    c.globalAlpha = enterAlpha * 0.52;
     c.beginPath(); c.rect(0, floorY, W, H - floorY); c.clip();
     c.translate(0, 2 * floorY); c.scale(1, -1);
+    // All draws below use original (x, y) coords; they appear at (x, 2*floorY - y) on screen.
 
-    // Reflected body blob — charY maps to screen y = 2*floorY - charY (below floor)
+    // Reflected arms
+    const _rAL = inAir * 0.55 + 0.15;
+    [-1, 1].forEach(side => {
+        const bAng = side > 0 ? -Math.PI * 0.55 : -Math.PI * 0.45;
+        const aAng = bAng - side * _rAL * 0.35;
+        const ax2  = charCX + Math.cos(aAng) * charR * 0.92 * sqX;
+        const ay2  = charY  + Math.sin(aAng) * charR * 0.60 * sqY;
+        c.save();
+        c.translate(ax2, ay2);
+        c.rotate(aAng + (side > 0 ? 0.2 : -0.2) - _rAL * side * 0.4);
+        const rAG = c.createRadialGradient(-7, -5, 1, 0, 0, 20);
+        rAG.addColorStop(0, hexToRgba(window.PLAYER_COLOR, 1));
+        rAG.addColorStop(1, hexToRgba(window.PLAYER_COLOR, 0.7));
+        c.fillStyle = rAG;
+        c.beginPath(); c.ellipse(0, 0, 20, 13, 0, 0, Math.PI * 2); c.fill();
+        c.restore();
+    });
+
+    // Reflected body (same gradient as the real body)
     c.save();
-    c.globalAlpha = enterAlpha * 0.62;
     c.translate(charCX, charY); c.scale(sqX, sqY);
-    const refBG = c.createRadialGradient(0, 0, charR * 0.05, 0, 0, charR);
-    refBG.addColorStop(0,   hexToRgba(window.PLAYER_COLOR, 0.72));
-    refBG.addColorStop(0.5, hexToRgba(window.PLAYER_COLOR, 0.38));
-    refBG.addColorStop(1,   hexToRgba(window.PLAYER_COLOR, 0.06));
-    c.fillStyle = refBG; c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    const rBG = c.createRadialGradient(-charR*0.28, -charR*0.32, charR*0.04, charR*0.08, charR*0.08, charR*1.18);
+    rBG.addColorStop(0,    hexToRgba(window.PLAYER_COLOR, 1));
+    rBG.addColorStop(0.55, hexToRgba(window.PLAYER_COLOR, 0.9));
+    rBG.addColorStop(1,    hexToRgba(window.PLAYER_COLOR, 0.72));
+    c.fillStyle = rBG;
+    c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    const rHL = c.createRadialGradient(-charR*0.30, -charR*0.36, 3, -charR*0.10, -charR*0.14, charR*0.72);
+    rHL.addColorStop(0,    'rgba(255,255,255,0.52)');
+    rHL.addColorStop(0.42, 'rgba(255,255,255,0.12)');
+    rHL.addColorStop(1,    'rgba(255,255,255,0)');
+    c.fillStyle = rHL;
+    c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    // Reflected face (y-flip makes it appear upside-down — correct for a floor mirror)
+    c.save();
+    c.translate(charCX, charY); c.scale(sqX, sqY);
+    _drawWinFace(c, charR);
     c.restore();
 
     c.restore(); // end flip + clip
 
     // Fade reflection into the black background
     c.save();
-    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 2.8);
+    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 2.5);
     reflFade.addColorStop(0,    'rgba(0,0,0,0)');
-    reflFade.addColorStop(0.25, 'rgba(0,0,0,0.20)');
+    reflFade.addColorStop(0.30, 'rgba(0,0,0,0.15)');
+    reflFade.addColorStop(0.75, 'rgba(0,0,0,0.70)');
     reflFade.addColorStop(1,    'rgba(0,0,0,1)');
     c.fillStyle = reflFade;
-    c.fillRect(0, floorY, W, charR * 2.8);
+    c.fillRect(0, floorY, W, charR * 2.5);
     c.restore();
     // ───────────────────────────────────────────────────────────────────
 
