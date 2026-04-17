@@ -1351,16 +1351,15 @@ function _joystickUpdateMouse() {
     const dx = touchJoystick.knobX - touchJoystick.baseX;
     const dy = touchJoystick.knobY - touchJoystick.baseY;
     const dist = Math.hypot(dx, dy);
-    if (dist < 4) {
-        // Stick centred — stop player (aim rawMouse at screen centre)
+    if (dist < 6) {
+        // Dead zone — stop the player
         rawMouse.x = canvas.width  / 2;
         rawMouse.y = canvas.height / 2;
     } else {
-        // Aim rawMouse far in the stick direction so player moves at full speed
+        // Fixed-distance target in stick direction → constant speed regardless of deflection
         const nx = dx / dist, ny = dy / dist;
-        const power = Math.min(dist / JOYSTICK_RADIUS, 1);
-        rawMouse.x = canvas.width  / 2 + nx * power * 3000;
-        rawMouse.y = canvas.height / 2 + ny * power * 3000;
+        rawMouse.x = canvas.width  / 2 + nx * 180;
+        rawMouse.y = canvas.height / 2 + ny * 180;
     }
 }
 
