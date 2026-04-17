@@ -1357,6 +1357,99 @@ function initSpotlights() {
 initSpotlights();
 
 // ─────────────────────────────────────────────
+// AUDIO
+// ─────────────────────────────────────────────
+let _ac = null;
+function _getAC() {
+    if (!_ac) _ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (_ac.state === 'suspended') _ac.resume();
+    return _ac;
+}
+// Unlock AudioContext on first touch (iOS Safari requires a user gesture)
+document.addEventListener('pointerdown', () => { try { _getAC(); } catch(e){} }, { once: true });
+
+function _env(g, now, atk, decay, peak) {
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(peak, now + atk);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + atk + decay);
+}
+function _osc(ctx, type, freq, now, decay, peak, freqEnd) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type = type;
+    o.frequency.setValueAtTime(freq, now);
+    if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, now + decay);
+    _env(g, now, 0.005, decay, peak);
+    o.start(now); o.stop(now + decay + 0.05);
+}
+function _noise(ctx, now, decay, peak, cutoff) {
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, Math.ceil(sr * (decay + 0.05)), sr);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const flt = ctx.createBiquadFilter();
+    flt.type = 'lowpass'; flt.frequency.value = cutoff || 2000;
+    const g = ctx.createGain();
+    src.connect(flt); flt.connect(g); g.connect(ctx.destination);
+    _env(g, now, 0.003, decay, peak);
+    src.start(now);
+}
+
+function sfxPickup() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        _osc(ctx, 'sine', 1047, n,        0.13, 0.20);
+        _osc(ctx, 'sine', 1319, n + 0.06, 0.13, 0.16);
+        _osc(ctx, 'sine', 1568, n + 0.11, 0.16, 0.11);
+        _noise(ctx, n, 0.10, 0.05, 5000);
+    } catch(e) {}
+}
+function sfxPearl() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        _osc(ctx, 'sine', 280, n,        0.50, 0.38, 1900);
+        _osc(ctx, 'sine', 560, n + 0.08, 0.38, 0.20, 2600);
+        [880, 1047, 1319, 1568].forEach((f, i) =>
+            _osc(ctx, 'sine', f, n + 0.08 + i * 0.07, 0.28, 0.12 - i * 0.02));
+    } catch(e) {}
+}
+function sfxHit() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        _osc(ctx, 'sawtooth', 130, n, 0.20, 0.45, 38);
+        _noise(ctx, n, 0.14, 0.30, 700);
+    } catch(e) {}
+}
+function sfxBombHit() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        _osc(ctx, 'sawtooth', 190, n, 0.38, 0.55, 28);
+        _osc(ctx, 'sine',      70, n, 0.28, 0.30, 18);
+        _noise(ctx, n, 0.32, 0.48, 600);
+    } catch(e) {}
+}
+function sfxEatEnemy() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        _osc(ctx, 'sine', 520, n, 0.07, 0.28, 240);
+        _noise(ctx, n, 0.06, 0.12, 1400);
+    } catch(e) {}
+}
+function sfxWinFanfare() {
+    try {
+        const ctx = _getAC(), n = ctx.currentTime;
+        // C E G C E — ascending major arpeggio
+        [523, 659, 784, 1047, 1319].forEach((f, i) => {
+            _osc(ctx, 'sine', f,     n + i * 0.11, 0.38, 0.28 - i * 0.02);
+            _osc(ctx, 'sine', f * 2, n + i * 0.11, 0.22, 0.06);
+        });
+        _noise(ctx, n + 0.6, 0.30, 0.07, 6000);
+    } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
 // INPUT
 // ─────────────────────────────────────────────
 function haptic(pattern) {
@@ -1714,6 +1807,7 @@ function update() {
                     player.baseR += 15; player.wobbleV += 50;
                     enemiesEaten++;
                     eatenEl.innerText = enemiesEaten;
+                    sfxEatEnemy();
                     player.anim.gulp = 1;
                     for(let i=0; i<8; i++) {
                         const a = Math.random()*Math.PI*2;
@@ -1727,7 +1821,7 @@ function update() {
                         spawnEnemyDebris(en.x, en.y, '#3e3e3e');
                         updateHealthUI();
                         shakeTime = 15; flashAlpha = 0.7; hitCooldown = 60;
-                        haptic([30, 10, 60]);
+                        haptic([30, 10, 60]); sfxHit();
                         spawnHitSplash(player.x, player.y);
                         const _ne3 = spawnEnemy();
                         if (_ne3) enemies[idx] = _ne3; else enemies.splice(idx, 1);
@@ -1757,7 +1851,7 @@ function update() {
                         loseAllItems();
                         player.anim.hit = 1;
                         shakeTime = 20; flashAlpha = 0.8; hitCooldown = 60;
-                        haptic([50, 20, 80]);
+                        haptic([50, 20, 80]); sfxBombHit();
                         spawnAnimeExplosion(en.x, en.y);
                         en.exploding = true;
                         en.explodeTimer = 45;
@@ -1854,10 +1948,11 @@ function update() {
                 } else {
                     if (it.type === 'pearl') {
                         huntedTime = 600;
-                        haptic([15, 8, 15, 8, 25]);
+                        haptic([15, 8, 15, 8, 25]); sfxPearl();
                         flashAlpha = 1.2; // big cinematic white flash
                         setTimeout(() => { items[idx] = spawn(); }, 400);
                     } else {
+                    sfxPickup();
                     player.wobbleV += 35;
                     const sorted = [...SLOTS].sort((a,b) => player.currentGrowth[a.name] - player.currentGrowth[b.name]);
                     const target = sorted[0];
@@ -3879,6 +3974,8 @@ function startWinAnim(stageNum) {
     _winGemEnterT  = 0;
     if (_winRAF) cancelAnimationFrame(_winRAF);
     _winRAF = requestAnimationFrame(_drawWinFrame);
+    // Fanfare plays as gem lands (easeOutBack peak is at ~80% of duration)
+    setTimeout(sfxWinFanfare, GEM_ENTER_DUR * 800);
 }
 
 function stopWinAnim() {
