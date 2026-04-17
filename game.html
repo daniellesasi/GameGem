@@ -3945,12 +3945,21 @@ function _drawWinFrame(ts) {
     c.beginPath(); c.ellipse(charCX, floorY, caustRx, caustRy, 0, 0, Math.PI * 2); c.fill();
     c.restore();
 
-    // Mirror reflection — clip below floorY, flip canvas around floorY
+    // Mirror reflection — perspective-compressed to simulate a glossy floor at a grazing angle.
+    // kRef < 0.5 squishes everything vertically, bringing the high gem into the visible area
+    // and creating the natural foreshortening you'd see in a real reflective surface.
+    const kRef = 0.28;
+    // A point drawn at canvas y appears on screen at: floorY*(1+kRef) - kRef*y
     c.save();
-    c.globalAlpha = enterAlpha * 0.52;
+    c.globalAlpha = enterAlpha * 0.50;
     c.beginPath(); c.rect(0, floorY, W, H - floorY); c.clip();
-    c.translate(0, 2 * floorY); c.scale(1, -1);
-    // All draws below use original (x, y) coords; they appear at (x, 2*floorY - y) on screen.
+    c.translate(0, floorY * (1 + kRef)); c.scale(1, -kRef);
+
+    // Reflected gem (same entrance scale/rotation, appears squished on floor)
+    c.save();
+    c.translate(charCX, gemY); c.scale(enterScale, enterScale); c.translate(-charCX, -gemY);
+    _drawWinGemPolygons(c, _winStage, charCX, gemY, gemSize, -gemRot);
+    c.restore();
 
     // Reflected arms
     const _rAL = inAir * 0.55 + 0.15;
@@ -3970,7 +3979,7 @@ function _drawWinFrame(ts) {
         c.restore();
     });
 
-    // Reflected body (same gradient as the real body)
+    // Reflected body
     c.save();
     c.translate(charCX, charY); c.scale(sqX, sqY);
     const rBG = c.createRadialGradient(-charR*0.28, -charR*0.32, charR*0.04, charR*0.08, charR*0.08, charR*1.18);
@@ -3987,23 +3996,23 @@ function _drawWinFrame(ts) {
     c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
     c.restore();
 
-    // Reflected face (y-flip makes it appear upside-down — correct for a floor mirror)
+    // Reflected face (appears upside-down due to y-flip — correct for a floor mirror)
     c.save();
     c.translate(charCX, charY); c.scale(sqX, sqY);
     _drawWinFace(c, charR);
     c.restore();
 
-    c.restore(); // end flip + clip
+    c.restore(); // end perspective flip + clip
 
     // Fade reflection into the black background
     c.save();
-    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 2.5);
+    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 3.0);
     reflFade.addColorStop(0,    'rgba(0,0,0,0)');
-    reflFade.addColorStop(0.30, 'rgba(0,0,0,0.15)');
-    reflFade.addColorStop(0.75, 'rgba(0,0,0,0.70)');
+    reflFade.addColorStop(0.20, 'rgba(0,0,0,0.10)');
+    reflFade.addColorStop(0.65, 'rgba(0,0,0,0.65)');
     reflFade.addColorStop(1,    'rgba(0,0,0,1)');
     c.fillStyle = reflFade;
-    c.fillRect(0, floorY, W, charR * 2.5);
+    c.fillRect(0, floorY, W, charR * 3.0);
     c.restore();
     // ───────────────────────────────────────────────────────────────────
 
