@@ -3495,6 +3495,7 @@ let _winRAF = null;
 let _winT = 0;
 let _winPrevTs = 0;
 let _winStage = 1;
+let _winRaySeeds = null; // generated once per win screen open
 
 const _winStars = Array.from({ length: 55 }, () => ({
     x: Math.random(), y: Math.random(),
@@ -3653,51 +3654,64 @@ function _drawWinFrame(ts) {
     const sqX    = 1 + (bounce < 0 ? -bounce * 0.10 : 0) - inAir * 0.05;
     const sqY    = 1 - (bounce < 0 ? -bounce * 0.07 : 0) + inAir * 0.10;
 
-    // ── GEM (drawn first so rays go behind char) ──
+    // ── GEM — independent float, not tied to character hop ──
     const gemSize = charR * 1.15;
-    const gemBob  = Math.sin(t * 2.2 + 0.9) * 7;
-    const gemRot  = Math.sin(t * 1.3) * 0.18;
-    // Clear gap between gem bottom and char top
-    const gemY    = charY - charR * 1.55 - gemSize * 0.9 + gemBob;
+    // Dual-wave gentle float: slow drift + tiny wobble
+    const gemBob  = Math.sin(t * 0.9) * 6 + Math.sin(t * 1.7 + 1.1) * 2.5;
+    const gemRot  = Math.sin(t * 0.8) * 0.12 + Math.sin(t * 1.9 + 0.4) * 0.04;
+    // Fixed vertical anchor (not charY) so gem doesn't hop with the body
+    const gemAnchorY = groundY - charR * 2.6 - gemSize * 0.9;
+    const gemY       = gemAnchorY + gemBob;
 
     const baseHue = (t * 38) % 360;
 
-    // Pearl-mode iridescent halo rays — screen blend, radiating from gem centre
+    // Per-ray seed values for organic variety (computed once, stable)
+    // Use golden-angle-ish irrational spacing for natural-looking size distribution
+    const RAY_COUNT = 56;
+    const _raySeeds = _winRaySeeds || (_winRaySeeds = Array.from({length: RAY_COUNT}, (_, i) => ({
+        lenMult:   0.5 + ((i * 0.618033) % 1) * 2.2,   // 0.5 → 2.7  (wide spread of lengths)
+        widthMult: 0.4 + ((i * 0.381966) % 1) * 1.8,   // 0.4 → 2.2  (varied widths)
+        pulseSeed: Math.random() * Math.PI * 2,
+        pulseSpd:  1.6 + Math.random() * 2.2,
+    })));
+
+    // Pearl-mode iridescent halo rays — organic sizes via per-ray seeds
     c.save();
     c.globalCompositeOperation = 'screen';
-    const rayCount = 52;
-    for (let i = 0; i < rayCount; i++) {
-        const angle      = (i / rayCount) * Math.PI * 2;
-        const driftAngle = angle + t * 0.014 + Math.sin(t * 1.5 + i * 0.85) * 0.035;
+    for (let i = 0; i < RAY_COUNT; i++) {
+        const seed       = _raySeeds[i];
+        const angle      = (i / RAY_COUNT) * Math.PI * 2;
+        const driftAngle = angle + t * 0.013 + Math.sin(t * 1.4 + i * 0.82) * 0.04;
         const cosA = Math.cos(driftAngle), sinA = Math.sin(driftAngle);
-        const pulse = 0.38 + 0.44 * Math.sin(t * 2.6 + i * 2.1);
-        const rayLen = gemSize * (1.6 + pulse * 1.8);
-        const startX = charCX + cosA * gemSize * 0.42;
-        const startY = gemY   + sinA * gemSize * 0.42;
-        const endX   = charCX + cosA * (gemSize * 0.42 + rayLen);
-        const endY   = gemY   + sinA * (gemSize * 0.42 + rayLen);
-        const hue    = (baseHue + i * (360 / rayCount) + Math.sin(t * 1.2 + i) * 35) % 360;
+        const pulse  = 0.35 + 0.45 * Math.sin(t * seed.pulseSpd + seed.pulseSeed);
+        const rayLen = gemSize * seed.lenMult * (0.7 + pulse * 0.9);
+        const startX = charCX + cosA * gemSize * 0.40;
+        const startY = gemY   + sinA * gemSize * 0.40;
+        const endX   = charCX + cosA * (gemSize * 0.40 + rayLen);
+        const endY   = gemY   + sinA * (gemSize * 0.40 + rayLen);
+        const hue    = (baseHue + i * (360 / RAY_COUNT) + Math.sin(t * 1.1 + i) * 40) % 360;
+        const alpha  = pulse * seed.widthMult * 0.55;
         const grad   = c.createLinearGradient(startX, startY, endX, endY);
-        grad.addColorStop(0,    `hsla(${hue},               85%, 80%, ${0.85 * pulse})`);
-        grad.addColorStop(0.18, `hsla(${(hue+40)%360},      90%, 75%, ${0.55 * pulse})`);
-        grad.addColorStop(0.55, `hsla(${(hue+80)%360},      85%, 70%, ${0.20 * pulse})`);
-        grad.addColorStop(1,    `hsla(${(hue+120)%360},     80%, 65%, 0)`);
+        grad.addColorStop(0,    `hsla(${hue},              85%, 82%, ${Math.min(1, alpha * 1.6)})`);
+        grad.addColorStop(0.15, `hsla(${(hue+40)%360},     90%, 76%, ${Math.min(1, alpha * 1.1)})`);
+        grad.addColorStop(0.50, `hsla(${(hue+80)%360},     85%, 70%, ${alpha * 0.45})`);
+        grad.addColorStop(1,    `hsla(${(hue+120)%360},    80%, 65%, 0)`);
         c.beginPath();
         c.moveTo(startX, startY);
         c.lineTo(endX, endY);
         c.strokeStyle = grad;
-        c.lineWidth   = (1.3 + 1.8 * pulse);
+        c.lineWidth   = seed.widthMult * (0.6 + 1.6 * pulse);
         c.lineCap     = 'round';
         c.stroke();
-        // Bright core on stronger rays
-        if (pulse > 0.55) {
-            const coreA  = (pulse - 0.55) * 1.4;
-            const coreG  = c.createLinearGradient(startX, startY, endX, endY);
-            coreG.addColorStop(0,   `hsla(${(hue+20)%360}, 50%, 95%, ${coreA})`);
-            coreG.addColorStop(0.35,`hsla(${(hue+60)%360}, 60%, 90%, ${coreA*0.4})`);
-            coreG.addColorStop(1,   'rgba(255,255,255,0)');
+        // Bright core on the wider rays
+        if (pulse > 0.5 && seed.widthMult > 1.1) {
+            const coreA = (pulse - 0.5) * seed.widthMult * 0.8;
+            const coreG = c.createLinearGradient(startX, startY, endX, endY);
+            coreG.addColorStop(0,    `hsla(${(hue+20)%360}, 50%, 96%, ${coreA})`);
+            coreG.addColorStop(0.30, `hsla(${(hue+60)%360}, 60%, 92%, ${coreA * 0.35})`);
+            coreG.addColorStop(1,    'rgba(255,255,255,0)');
             c.beginPath(); c.moveTo(startX, startY); c.lineTo(endX, endY);
-            c.strokeStyle = coreG; c.lineWidth = 0.9; c.stroke();
+            c.strokeStyle = coreG; c.lineWidth = seed.widthMult * 0.55; c.stroke();
         }
     }
     c.globalCompositeOperation = 'source-over';
@@ -3705,6 +3719,40 @@ function _drawWinFrame(ts) {
 
     // Gem polygons (on top of rays)
     _drawWinGemPolygons(c, _winStage, charCX, gemY, gemSize, gemRot);
+
+    // Gem glare — lens-flare cross on the brightest facet
+    c.save();
+    const glareX = charCX + gemSize * 0.22;
+    const glareY = gemY   - gemSize * 0.28;
+    const glarePulse = 0.5 + 0.5 * Math.sin(t * 2.1 + 0.3);
+    const glareSize  = gemSize * (0.18 + 0.10 * glarePulse);
+    // 4-point star cross
+    for (let arm = 0; arm < 4; arm++) {
+        const ax = arm % 2 === 0 ? glareSize : glareSize * 0.28;
+        const ay = arm % 2 === 0 ? glareSize * 0.28 : glareSize;
+        const angle = arm * Math.PI / 2;
+        const g1 = c.createLinearGradient(
+            glareX, glareY,
+            glareX + Math.cos(angle) * ax, glareY + Math.sin(angle) * ay
+        );
+        g1.addColorStop(0,   `rgba(255,255,255,${0.85 * glarePulse})`);
+        g1.addColorStop(0.4, `rgba(255,255,255,${0.30 * glarePulse})`);
+        g1.addColorStop(1,   'rgba(255,255,255,0)');
+        c.beginPath(); c.moveTo(glareX, glareY);
+        c.lineTo(glareX + Math.cos(angle) * ax, glareY + Math.sin(angle) * ay);
+        c.strokeStyle = g1; c.lineWidth = ax * 0.45; c.lineCap = 'round'; c.stroke();
+        c.beginPath(); c.moveTo(glareX, glareY);
+        c.lineTo(glareX - Math.cos(angle) * ax * 0.4, glareY - Math.sin(angle) * ax * 0.4);
+        c.strokeStyle = g1; c.lineWidth = ax * 0.3; c.stroke();
+    }
+    // Bright centre dot
+    const dotG = c.createRadialGradient(glareX, glareY, 0, glareX, glareY, glareSize * 0.35);
+    dotG.addColorStop(0,   `rgba(255,255,255,${0.95 * glarePulse})`);
+    dotG.addColorStop(0.5, `rgba(220,240,255,${0.40 * glarePulse})`);
+    dotG.addColorStop(1,   'rgba(255,255,255,0)');
+    c.fillStyle = dotG;
+    c.beginPath(); c.arc(glareX, glareY, glareSize * 0.35, 0, Math.PI * 2); c.fill();
+    c.restore();
 
     // Sparkle stars around gem
     for (let i = 0; i < 5; i++) {
@@ -3775,9 +3823,10 @@ function _drawWinFrame(ts) {
 }
 
 function startWinAnim(stageNum) {
-    _winStage = stageNum || 1;
-    _winT = 0;
-    _winPrevTs = performance.now();
+    _winStage    = stageNum || 1;
+    _winT        = 0;
+    _winPrevTs   = performance.now();
+    _winRaySeeds = null; // regenerate per-ray seeds each time
     if (_winRAF) cancelAnimationFrame(_winRAF);
     _winRAF = requestAnimationFrame(_drawWinFrame);
 }
