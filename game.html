@@ -1338,9 +1338,26 @@ initSpotlights();
 // ─────────────────────────────────────────────
 // INPUT
 // ─────────────────────────────────────────────
+function haptic(pattern) {
+    if (IS_TOUCH && navigator.vibrate) navigator.vibrate(pattern);
+}
+
+const touchJoystick = { active: false, x: 0, y: 0 };
+
 window.addEventListener('pointermove', e => {
     rawMouse.x = e.clientX; rawMouse.y = e.clientY;
+    if (IS_TOUCH && e.isPrimary) { touchJoystick.x = e.clientX; touchJoystick.y = e.clientY; }
 });
+window.addEventListener('pointerdown', e => {
+    if (IS_TOUCH && e.isPrimary) {
+        touchJoystick.active = true;
+        touchJoystick.x = e.clientX;
+        touchJoystick.y = e.clientY;
+        rawMouse.x = e.clientX; rawMouse.y = e.clientY;
+    }
+});
+window.addEventListener('pointerup', e => { if (IS_TOUCH && e.isPrimary) touchJoystick.active = false; });
+window.addEventListener('pointercancel', e => { if (IS_TOUCH && e.isPrimary) touchJoystick.active = false; });
 
 // ─────────────────────────────────────────────
 // SDF
@@ -1664,6 +1681,7 @@ function update() {
                         spawnEnemyDebris(en.x, en.y, '#3e3e3e');
                         updateHealthUI();
                         shakeTime = 15; flashAlpha = 0.7; hitCooldown = 60;
+                        haptic([30, 10, 60]);
                         spawnHitSplash(player.x, player.y);
                         const _ne3 = spawnEnemy();
                         if (_ne3) enemies[idx] = _ne3; else enemies.splice(idx, 1);
@@ -1693,6 +1711,7 @@ function update() {
                         loseAllItems();
                         player.anim.hit = 1;
                         shakeTime = 20; flashAlpha = 0.8; hitCooldown = 60;
+                        haptic([50, 20, 80]);
                         spawnAnimeExplosion(en.x, en.y);
                         en.exploding = true;
                         en.explodeTimer = 45;
@@ -1783,11 +1802,13 @@ function update() {
                     t: 0 // 0 → 1 over ~18 frames
                 });
                 player.anim.gulp = 1; player.anim.puff = 1;
+                haptic(25);
                 if (winPhase === 1) {
                     player.baseR += 100; player.wobbleV += 150;
                 } else {
                     if (it.type === 'pearl') {
                         huntedTime = 600;
+                        haptic([15, 8, 15, 8, 25]);
                         flashAlpha = 1.2; // big cinematic white flash
                         setTimeout(() => { items[idx] = spawn(); }, 400);
                     } else {
@@ -3110,9 +3131,9 @@ function draw() {
 
             // Draw ray as a thin line with gradient stroke — no hard edges
             const grad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
-            grad.addColorStop(0, `hsla(${hue}, 80%, 80%, ${fade * 0.6 * pulse})`);
-            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360}, 90%, 75%, ${fade * 0.4 * pulse})`);
-            grad.addColorStop(0.5, `hsla(${(hue + 80) % 360}, 85%, 70%, ${fade * 0.15 * pulse})`);
+            grad.addColorStop(0, `hsla(${hue}, 80%, 80%, ${fade * 1.0 * pulse})`);
+            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360}, 90%, 75%, ${fade * 0.7 * pulse})`);
+            grad.addColorStop(0.5, `hsla(${(hue + 80) % 360}, 85%, 70%, ${fade * 0.3 * pulse})`);
             grad.addColorStop(1, `hsla(${(hue + 120) % 360}, 80%, 65%, 0)`);
 
             // Fine line stroke instead of triangle — no visible hard edges
@@ -3120,22 +3141,22 @@ function draw() {
             ctx.moveTo(edgeX, edgeY);
             ctx.lineTo(innerX, innerY);
             ctx.strokeStyle = grad;
-            ctx.lineWidth = (1 + 1.5 * pulse) * fade;
+            ctx.lineWidth = (1.5 + 2.0 * pulse) * fade;
             ctx.lineCap = 'round';
             ctx.stroke();
 
             // Even finer bright core with white-ish iridescent tint
             if (pulse > 0.5) {
-                const coreA = fade * 0.4 * (pulse - 0.5) * 2;
+                const coreA = fade * 0.7 * (pulse - 0.5) * 2;
                 const coreGrad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
                 coreGrad.addColorStop(0, `hsla(${(hue + 20) % 360}, 50%, 95%, ${coreA})`);
-                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360}, 60%, 90%, ${coreA * 0.4})`);
+                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360}, 60%, 90%, ${coreA * 0.5})`);
                 coreGrad.addColorStop(1, 'rgba(255,255,255,0)');
                 ctx.beginPath();
                 ctx.moveTo(edgeX, edgeY);
                 ctx.lineTo(innerX, innerY);
                 ctx.strokeStyle = coreGrad;
-                ctx.lineWidth = 0.5 * fade;
+                ctx.lineWidth = 1.0 * fade;
                 ctx.stroke();
             }
         }
@@ -3379,6 +3400,23 @@ function draw() {
             }
         });
         ctx.globalAlpha = 1;
+        ctx.restore();
+    }
+
+    // Touch joystick indicator — small circle at finger position
+    if (IS_TOUCH && touchJoystick.active) {
+        const jx = touchJoystick.x, jy = touchJoystick.y;
+        ctx.save();
+        ctx.globalAlpha = 0.55;
+        ctx.beginPath();
+        ctx.arc(jx, jy, 22, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(jx, jy, 5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fill();
         ctx.restore();
     }
 
@@ -4240,17 +4278,6 @@ function renderNecklaceMap() {
         }
 
         // Stage number label
-        {
-            const b = getGemBounds(gem);
-            const lx = b.cx, ly = b.maxY + 11;
-            if (isLocked) {
-                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7" font-family="Montserrat,sans-serif" font-weight="700" fill="rgba(255,255,255,0.25)" letter-spacing="0.5">${stageNum}</text>`;
-            } else if (completed) {
-                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7" font-family="Montserrat,sans-serif" font-weight="700" fill="rgba(255,255,255,0.55)" letter-spacing="0.5">${stageNum}</text>`;
-            } else {
-                svg += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="8" font-family="Montserrat,sans-serif" font-weight="900" fill="white" letter-spacing="0.5">${stageNum}</text>`;
-            }
-        }
 
         // Completed checkmark badge
         if (completed) {
