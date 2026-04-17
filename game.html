@@ -69,24 +69,38 @@
         /* ── WIN OVERLAY ── */
         #win-overlay {
             position: fixed; inset: 0;
-            background: rgba(69,232,195,1);
+            background: radial-gradient(ellipse at 50% 25%, #1a0c30 0%, #090816 55%, #020209 100%);
             display: none; flex-direction: column; justify-content: center; align-items: center;
-            color: white; z-index: 100; font-weight: 900;
-            opacity: 0; transition: opacity 1.5s ease-in-out;
-            padding: 24px; text-align: center;
+            color: white; z-index: 100;
+            opacity: 0; transition: opacity 0.8s ease-in-out;
+            padding: 20px 24px; text-align: center; gap: 2px;
         }
-        #win-overlay h1 { font-size: clamp(36px, 10vw, 80px); margin: 0; text-shadow: 4px 4px #1a6b57; }
-        #win-overlay p  { font-size: clamp(11px, 3vw, 20px); letter-spacing: 5px; margin-top: 12px; }
-        #win-overlay button {
-            margin-top: 30px; padding: 15px 30px; background: white; color: #45e8c3;
-            border: none; font-weight: bold; cursor: pointer; border-radius: 50px;
-            text-transform: uppercase; pointer-events: all; font-size: clamp(13px, 3vw, 16px);
+        #win-subtitle {
+            font-size: clamp(9px, 2.2vw, 12px); letter-spacing: 8px; opacity: 0.45;
+            font-family: 'Montserrat', sans-serif; font-weight: 400; text-transform: uppercase; margin: 0;
+        }
+        #win-gem-name {
+            font-size: clamp(20px, 5.5vw, 36px); letter-spacing: 3px; font-family: 'Anton', sans-serif;
+            text-transform: uppercase; margin: 2px 0 0;
+        }
+        #win-anim-canvas {
+            width: min(220px, 58vw); height: min(290px, 76vw);
+            display: block;
         }
         #win-stats {
-            margin-top: 20px; font-size: clamp(14px, 3.5vw, 22px); letter-spacing: 2px;
-            opacity: 0.9;
+            font-size: clamp(10px, 2.5vw, 14px); letter-spacing: 3px; opacity: 0.6;
+            font-family: 'Montserrat', sans-serif; font-weight: 400; margin-top: 2px;
         }
-        #win-stats span { font-weight: 900; }
+        #win-stats span { font-weight: 700; opacity: 1; }
+        #win-stats p { margin: 4px 0; }
+        #win-overlay button {
+            margin-top: 14px; padding: 13px 36px; background: transparent; color: white;
+            border: 1.5px solid rgba(255,255,255,0.4); font-weight: 600; cursor: pointer;
+            border-radius: 50px; text-transform: uppercase;
+            pointer-events: all; font-size: clamp(10px, 2.2vw, 13px); letter-spacing: 4px;
+            font-family: 'Montserrat', sans-serif; transition: background 0.2s, border-color 0.2s;
+        }
+        #win-overlay button:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.75); }
 
         /* ── GAME OVER OVERLAY ── */
         #game-over-overlay {
@@ -697,8 +711,9 @@
     </div>
 
     <div id="win-overlay">
-        <h1>CONGRATULATIONS!</h1>
-        <p>LEVEL COMPLETE</p>
+        <p id="win-subtitle">STAGE CLEAR</p>
+        <div id="win-gem-name"></div>
+        <canvas id="win-anim-canvas"></canvas>
         <div id="win-stats"></div>
         <button onclick="returnToMenuAfterGame()">CONTINUE</button>
     </div>
@@ -1575,13 +1590,14 @@ function update() {
                 ? NECKLACE_GEMS[playingStage - 1].name : '';
             const nextStageNum = (playingStage >= 1 ? playingStage : currentStage) + 1;
             const stageUnlockMsg = (nextStageNum > currentStage && nextStageNum <= TOTAL_STAGES)
-                ? `<p style="font-size:clamp(11px,2.5vw,16px);letter-spacing:3px;opacity:0.9">STAGE ${nextStageNum} UNLOCKED</p>` : '';
+                ? `<p>STAGE ${nextStageNum} UNLOCKED</p>` : '';
+            document.getElementById('win-gem-name').textContent = gemName ? gemName + ' GEM' : '';
             document.getElementById('win-stats').innerHTML =
-                (gemName ? `<p>✦ ${gemName} GEM COLLECTED ✦</p>` : '') +
                 stageUnlockMsg +
                 `<p>PEARLS EARNED: <span>${enemiesEaten}</span></p>`;
             winOverlay.style.display = 'flex';
             setTimeout(() => { winOverlay.style.opacity = '1'; }, 50);
+            startWinAnim(playingStage > 0 ? playingStage : currentStage);
         }
     }
 
@@ -3466,6 +3482,281 @@ function draw() {
 
 }
 
+// ─────────────────────────────────────────────
+// WIN SCREEN ANIMATION
+// ─────────────────────────────────────────────
+let _winRAF = null;
+let _winT = 0;
+let _winPrevTs = 0;
+let _winStage = 1;
+
+const _winStars = Array.from({ length: 55 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: 0.4 + Math.random() * 1.4,
+    phase: Math.random() * Math.PI * 2,
+    spd: 0.4 + Math.random() * 1.1
+}));
+
+function _drawWinSparkle(ctx, x, y, size, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+        const a = i * Math.PI / 2 - Math.PI / 4;
+        ctx.lineTo(Math.cos(a) * size * 0.28, Math.sin(a) * size * 0.28);
+        const a2 = a + Math.PI / 4;
+        ctx.lineTo(Math.cos(a2) * size, Math.sin(a2) * size);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+function _drawWinGemPolygons(ctx, stageNum, cx, cy, targetSize, rotation) {
+    const gem = NECKLACE_GEMS[((stageNum - 1) + NECKLACE_GEMS.length) % NECKLACE_GEMS.length];
+    if (!gem || !gem.polygons) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    gem.polygons.forEach(poly => {
+        poly.pts.split(' ').forEach(p => {
+            const [x, y] = p.split(',').map(Number);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        });
+    });
+    const bW = maxX - minX, bH = maxY - minY;
+    const sc2 = (targetSize * 2) / Math.max(bW, bH);
+    const bCX = (minX + maxX) / 2, bCY = (minY + maxY) / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotation);
+    ctx.shadowColor = gem.polygons[0].fill;
+    ctx.shadowBlur = 22;
+    gem.polygons.forEach(poly => {
+        const pts = poly.pts.split(' ').map(p => { const [x, y] = p.split(',').map(Number); return [(x - bCX) * sc2, (y - bCY) * sc2]; });
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+        ctx.closePath();
+        ctx.fillStyle = poly.fill;
+        ctx.fill();
+    });
+    // Highlight flare on top facets
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = 'white';
+    gem.polygons.slice(0, Math.min(3, gem.polygons.length)).forEach(poly => {
+        const pts = poly.pts.split(' ').map(p => { const [x, y] = p.split(',').map(Number); return [(x - bCX) * sc2, (y - bCY) * sc2]; });
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+        ctx.closePath(); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
+function _drawWinFace(ctx, r) {
+    const sc = r / 110;
+    const fs = 1.1;
+    const et = window.PLAYER_EYE_TYPE;
+    const _EP2 = [
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 },
+        { spc: 90.0, y: -29.5, r: 36.0, wm: 1.70, vc: 0.50 },
+        { spc: 90.0, y: -34.0, r: 36.0, wm: 1.70, vc: 0.50 },
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 },
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 },
+        { spc: 35.5, y: -43.0, r: 31.5, wm: 1.70, vc: 0.50 },
+        { spc: 35.0, y: -35.0, r: 33.0, wm: 1.70, vc: 0.50 },
+        { spc: 73.6, y: -45.6, r: 36.0, wm: 1.70, vc: 0.50 },
+    ];
+    const ep2 = _EP2[et] || _EP2[0];
+    const eyeSpc = ep2.spc * fs * sc;
+    const eyeY   = ep2.y  * fs * sc;
+    const eyeR   = ep2.r  * fs * sc;
+    if (et === 7) {
+        if (eye2Idle.complete && eye2Idle.naturalWidth > 0) {
+            const eyeW = eyeSpc * ep2.wm * fs;
+            ctx.drawImage(eye2Idle, -eyeW / 2, eyeY - eyeW * ep2.vc, eyeW, eyeW);
+        }
+    } else if (et === 6) {
+        [-1, 1].forEach(side => {
+            ctx.save(); ctx.translate(side * eyeSpc, eyeY);
+            ctx.beginPath(); ctx.ellipse(0, 0, eyeR, eyeR * 1.227, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff'; ctx.fill(); ctx.clip();
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath(); ctx.ellipse(0, eyeR * 0.219, eyeR * 0.927, eyeR * 1.028, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(eyeR * 0.353, -eyeR * 0.491, eyeR * 0.174, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(eyeR * 0.564,  eyeR * 0.004, eyeR * 0.290, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        });
+    } else if (et === 0) {
+        [-1, 1].forEach(side => {
+            ctx.save(); ctx.translate(side * eyeSpc, eyeY);
+            ctx.beginPath(); ctx.arc(0, 0, eyeR, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff'; ctx.fill(); ctx.clip();
+            ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.arc(0, 0, eyeR * 0.9, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-eyeR * 0.4, -eyeR * 0.4, eyeR * 0.35, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-eyeR * 0.1, -eyeR * 0.6, eyeR * 0.15, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        });
+    } else {
+        const eyeImg = custEyeImages[et];
+        if (eyeImg && eyeImg.complete && eyeImg.naturalWidth > 0) {
+            const eyeW = eyeSpc * ep2.wm * fs;
+            const eyeH = eyeW * custEyeAspect[et];
+            ctx.drawImage(eyeImg, -eyeW / 2, eyeY - eyeH * ep2.vc, eyeW, eyeH);
+        }
+    }
+    const lt = window.PLAYER_LIP_TYPE;
+    const _LP2 = { 1: { cy: 25.5, size: 53 }, 2: { cy: 25.0, size: 102 }, 3: { cy: 13.5, size: 132 } };
+    const lp2 = _LP2[lt] || _LP2[1];
+    const idleImg = lt === 2 ? lip2Idle : lt === 3 ? lip3Idle1 : lip1Idle;
+    if (idleImg && idleImg.complete && idleImg.naturalWidth > 0) {
+        const idleS = lp2.size * fs * sc;
+        const cy    = lp2.cy  * fs * sc;
+        ctx.drawImage(idleImg, -idleS / 2, cy - idleS * 0.5, idleS, idleS);
+    }
+}
+
+function _drawWinFrame(ts) {
+    if (!_winRAF) return;
+    const dt = Math.min(3, (ts - _winPrevTs) / 16.667);
+    _winPrevTs = ts;
+    _winT += dt * 0.016;
+    const t = _winT;
+
+    const canvas = document.getElementById('win-anim-canvas');
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.offsetWidth || 220, H = canvas.offsetHeight || 290;
+    if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
+    const c = canvas.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+
+    // Background stars
+    _winStars.forEach(s => {
+        c.globalAlpha = 0.15 + 0.25 * Math.abs(Math.sin(t * s.spd + s.phase));
+        c.fillStyle = '#fff';
+        c.beginPath(); c.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); c.fill();
+    });
+    c.globalAlpha = 1;
+
+    const charCX  = W * 0.5;
+    const groundY = H * 0.76;
+    const charR   = Math.min(W * 0.27, 60);
+
+    // Hop animation
+    const bounce  = Math.sin(t * 3.8);
+    const inAir   = Math.max(0, bounce);
+    const charY   = groundY - inAir * charR * 0.7;
+    const sqX     = 1 + (bounce < 0 ? -bounce * 0.10 : 0) - inAir * 0.05;
+    const sqY     = 1 - (bounce < 0 ? -bounce * 0.07 : 0) + inAir * 0.10;
+
+    // Ground shadow
+    c.save();
+    c.translate(charCX, groundY + 4);
+    c.scale(1 - inAir * 0.4, 0.22);
+    const shG = c.createRadialGradient(0, 0, 2, 0, 0, charR);
+    shG.addColorStop(0, `rgba(0,0,0,${0.38 - inAir * 0.18})`);
+    shG.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = shG; c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    // Arms (Kirby-style nubs) — raised when in the air
+    const armLift = inAir * 0.55 + 0.15;
+    [-1, 1].forEach(side => {
+        const baseAngle  = side > 0 ? -Math.PI * 0.55 : -Math.PI * 0.45;
+        const liftOffset = side * armLift * 0.35;
+        const armAng     = baseAngle - liftOffset * side;
+        const ax = charCX + Math.cos(armAng) * charR * 0.92 * sqX;
+        const ay = charY  + Math.sin(armAng) * charR * 0.6  * sqY;
+        c.save();
+        c.translate(ax, ay);
+        c.rotate(armAng + (side > 0 ? 0.2 : -0.2) - armLift * side * 0.4);
+        const armG = c.createRadialGradient(-7, -5, 1, 0, 0, 19);
+        armG.addColorStop(0, hexToRgba(window.PLAYER_COLOR, 1));
+        armG.addColorStop(1, hexToRgba(window.PLAYER_COLOR, 0.72));
+        c.fillStyle = armG;
+        c.beginPath(); c.ellipse(0, 0, 18, 12, 0, 0, Math.PI * 2); c.fill();
+        c.restore();
+    });
+
+    // Body
+    c.save();
+    c.translate(charCX, charY);
+    c.scale(sqX, sqY);
+    const bodyG = c.createRadialGradient(-charR * 0.28, -charR * 0.32, charR * 0.04, charR * 0.08, charR * 0.08, charR * 1.18);
+    bodyG.addColorStop(0, hexToRgba(window.PLAYER_COLOR, 1));
+    bodyG.addColorStop(0.55, hexToRgba(window.PLAYER_COLOR, 0.9));
+    bodyG.addColorStop(1,    hexToRgba(window.PLAYER_COLOR, 0.72));
+    c.fillStyle = bodyG;
+    c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    // Specular
+    const hlG = c.createRadialGradient(-charR * 0.30, -charR * 0.36, 3, -charR * 0.10, -charR * 0.14, charR * 0.72);
+    hlG.addColorStop(0, 'rgba(255,255,255,0.52)');
+    hlG.addColorStop(0.42, 'rgba(255,255,255,0.12)');
+    hlG.addColorStop(1,    'rgba(255,255,255,0)');
+    c.fillStyle = hlG;
+    c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
+    c.restore();
+
+    // Face
+    c.save();
+    c.translate(charCX, charY);
+    c.scale(sqX, sqY);
+    _drawWinFace(c, charR);
+    c.restore();
+
+    // ── GEM ──
+    const gemSize = charR * 1.05;
+    const gemBob  = Math.sin(t * 2.2 + 0.9) * 6;
+    const gemRot  = Math.sin(t * 1.3) * 0.20;
+    const gemY    = charY - charR * 1.08 - gemSize * 0.62 + gemBob;
+
+    // Outer glow rings
+    const baseHue = (t * 38) % 360;
+    for (let gi = 2; gi >= 0; gi--) {
+        const gr  = gemSize * (1.05 + gi * 0.6) * (1 + 0.07 * Math.sin(t * 2.8 + gi));
+        const glG = c.createRadialGradient(charCX, gemY, gemSize * 0.25, charCX, gemY, gr);
+        const a   = (0.32 - gi * 0.09) * (0.55 + 0.45 * Math.sin(t * 2.4 + gi * 0.7));
+        glG.addColorStop(0, `hsla(${(baseHue + gi * 45) % 360}, 88%, 72%, ${a})`);
+        glG.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = glG;
+        c.beginPath(); c.arc(charCX, gemY, gr, 0, Math.PI * 2); c.fill();
+    }
+
+    // Gem polygons
+    _drawWinGemPolygons(c, _winStage, charCX, gemY, gemSize, gemRot);
+
+    // Sparkle stars orbiting gem
+    for (let i = 0; i < 5; i++) {
+        const a    = t * 1.7 + i * (Math.PI * 2 / 5);
+        const dist = gemSize * (0.95 + 0.18 * Math.sin(t * 2.2 + i * 1.4));
+        const sx2  = charCX + Math.cos(a) * dist;
+        const sy2  = gemY   + Math.sin(a) * dist * 0.5;
+        const ss   = 1.5 + Math.sin(t * 3.8 + i * 2.1) * 1.2;
+        if (ss < 0.4) continue;
+        const sa = 0.35 + 0.65 * Math.abs(Math.sin(t * 2.9 + i));
+        _drawWinSparkle(c, sx2, sy2, ss, `hsla(${(baseHue + i * 72) % 360}, 90%, 85%, ${sa})`);
+    }
+
+    _winRAF = requestAnimationFrame(_drawWinFrame);
+}
+
+function startWinAnim(stageNum) {
+    _winStage = stageNum || 1;
+    _winT = 0;
+    _winPrevTs = performance.now();
+    if (_winRAF) cancelAnimationFrame(_winRAF);
+    _winRAF = requestAnimationFrame(_drawWinFrame);
+}
+
+function stopWinAnim() {
+    if (_winRAF) { cancelAnimationFrame(_winRAF); _winRAF = null; }
+}
+
 // Game starts only after customizer approval
 // update() is called by startGame()
 
@@ -4433,6 +4724,7 @@ function initMainMenu() {
 // When game ends (win or lose), award pearls and return to necklace map
 function returnToMenuAfterGame() {
     // Award pearls for enemies eaten during the game
+    stopWinAnim();
     totalPearls += enemiesEaten;
     if (winPhase === 2) {
         // Win — advance frontier past the completed stage
