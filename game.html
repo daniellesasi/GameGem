@@ -3760,7 +3760,7 @@ function _drawWinFrame(ts) {
     const gemBob  = Math.sin(t * 0.9) * 6 + Math.sin(t * 1.7 + 1.1) * 2.5;
     const gemRot  = Math.sin(t * 0.8) * 0.12 + Math.sin(t * 1.9 + 0.4) * 0.04;
     // Fixed vertical anchor (not charY) so gem doesn't hop with the body
-    const gemAnchorY = groundY - charR * 2.6 - gemSize * 0.9;
+    const gemAnchorY = groundY - charR * 2.0 - gemSize * 0.9;
 
     // Entrance animation — gem drops from above with spring overshoot
     const enterEased = _easeOutBack(_winGemEnterT);
