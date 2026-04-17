@@ -1117,7 +1117,8 @@ const VIBRANT_LIGHTS = [
     [0,   60, 25],  [330, 60, 70],  [180, 60, 25],  [60,  40, 20],  [60,  80, 65]
 ];
 
-let rawMouse = { x: canvas.width / 2, y: canvas.height / 2 };
+let rawMouse    = { x: canvas.width / 2, y: canvas.height / 2 };
+let smoothMouse = { x: canvas.width / 2, y: canvas.height / 2 };
 let camera   = { x: canvas.width / 2, y: canvas.height / 2, zoom: IS_TOUCH ? 0.155 : 0.25 };
 
 let player = {
@@ -1489,8 +1490,8 @@ window.addEventListener('pointerdown', e => {
         _joystickUpdateMouse();
     }
 });
-window.addEventListener('pointerup',     e => { if (IS_TOUCH && e.isPrimary) touchJoystick.active = false; });
-window.addEventListener('pointercancel', e => { if (IS_TOUCH && e.isPrimary) touchJoystick.active = false; });
+window.addEventListener('pointerup',     e => { if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; } });
+window.addEventListener('pointercancel', e => { if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; } });
 
 // ─────────────────────────────────────────────
 // SDF
@@ -1593,9 +1594,14 @@ function update() {
         const el = document.getElementById('fps-counter');
         if (el) el.textContent = _fpsDisplay + ' FPS';
     }
+    // Smooth the input on touch so direction changes ramp rather than snap.
+    // Desktop lerp=1 (instant) preserves exact mouse tracking.
+    const _sLerp = IS_TOUCH ? 1 - Math.pow(0.85, dt) : 1.0;
+    smoothMouse.x += (rawMouse.x - smoothMouse.x) * _sLerp;
+    smoothMouse.y += (rawMouse.y - smoothMouse.y) * _sLerp;
     const worldM = {
-        x: (rawMouse.x - canvas.width /2) / camera.zoom + camera.x,
-        y: (rawMouse.y - canvas.height/2) / camera.zoom + camera.y
+        x: (smoothMouse.x - canvas.width /2) / camera.zoom + camera.x,
+        y: (smoothMouse.y - canvas.height/2) / camera.zoom + camera.y
     };
 
     player.anim.time += 0.016 * dt;
