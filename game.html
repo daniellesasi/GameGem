@@ -3720,38 +3720,58 @@ function _drawWinFrame(ts) {
     // Gem polygons (on top of rays)
     _drawWinGemPolygons(c, _winStage, charCX, gemY, gemSize, gemRot);
 
-    // Gem glare — lens-flare cross on the brightest facet
+    // Gem glare — realistic specular: soft bloom + thin light streak + iridescent fringe
     c.save();
-    const glareX = charCX + gemSize * 0.22;
-    const glareY = gemY   - gemSize * 0.28;
-    const glarePulse = 0.5 + 0.5 * Math.sin(t * 2.1 + 0.3);
-    const glareSize  = gemSize * (0.18 + 0.10 * glarePulse);
-    // 4-point star cross
-    for (let arm = 0; arm < 4; arm++) {
-        const ax = arm % 2 === 0 ? glareSize : glareSize * 0.28;
-        const ay = arm % 2 === 0 ? glareSize * 0.28 : glareSize;
-        const angle = arm * Math.PI / 2;
-        const g1 = c.createLinearGradient(
-            glareX, glareY,
-            glareX + Math.cos(angle) * ax, glareY + Math.sin(angle) * ay
-        );
-        g1.addColorStop(0,   `rgba(255,255,255,${0.85 * glarePulse})`);
-        g1.addColorStop(0.4, `rgba(255,255,255,${0.30 * glarePulse})`);
-        g1.addColorStop(1,   'rgba(255,255,255,0)');
-        c.beginPath(); c.moveTo(glareX, glareY);
-        c.lineTo(glareX + Math.cos(angle) * ax, glareY + Math.sin(angle) * ay);
-        c.strokeStyle = g1; c.lineWidth = ax * 0.45; c.lineCap = 'round'; c.stroke();
-        c.beginPath(); c.moveTo(glareX, glareY);
-        c.lineTo(glareX - Math.cos(angle) * ax * 0.4, glareY - Math.sin(angle) * ax * 0.4);
-        c.strokeStyle = g1; c.lineWidth = ax * 0.3; c.stroke();
-    }
-    // Bright centre dot
-    const dotG = c.createRadialGradient(glareX, glareY, 0, glareX, glareY, glareSize * 0.35);
-    dotG.addColorStop(0,   `rgba(255,255,255,${0.95 * glarePulse})`);
-    dotG.addColorStop(0.5, `rgba(220,240,255,${0.40 * glarePulse})`);
-    dotG.addColorStop(1,   'rgba(255,255,255,0)');
-    c.fillStyle = dotG;
-    c.beginPath(); c.arc(glareX, glareY, glareSize * 0.35, 0, Math.PI * 2); c.fill();
+    const glareX     = charCX + gemSize * 0.20;
+    const glareY     = gemY   - gemSize * 0.30;
+    const glarePulse = 0.55 + 0.45 * Math.sin(t * 1.8 + 0.5);
+
+    // 1. Soft outer bloom — wide, very low opacity
+    const bloomR = gemSize * 0.30;
+    const bloomG = c.createRadialGradient(glareX, glareY, 0, glareX, glareY, bloomR);
+    bloomG.addColorStop(0,   `rgba(255,255,255,${0.18 * glarePulse})`);
+    bloomG.addColorStop(0.5, `rgba(200,230,255,${0.08 * glarePulse})`);
+    bloomG.addColorStop(1,   'rgba(255,255,255,0)');
+    c.fillStyle = bloomG;
+    c.beginPath(); c.arc(glareX, glareY, bloomR, 0, Math.PI * 2); c.fill();
+
+    // 2. Tight specular hot-spot — small, sharp, bright
+    const spotR = gemSize * 0.055;
+    const spotG = c.createRadialGradient(glareX, glareY, 0, glareX, glareY, spotR);
+    spotG.addColorStop(0,   `rgba(255,255,255,${0.92 * glarePulse})`);
+    spotG.addColorStop(0.4, `rgba(230,245,255,${0.55 * glarePulse})`);
+    spotG.addColorStop(1,   'rgba(255,255,255,0)');
+    c.fillStyle = spotG;
+    c.beginPath(); c.arc(glareX, glareY, spotR, 0, Math.PI * 2); c.fill();
+
+    // 3. Thin light streak — the way a faceted gem catches a line of light
+    //    Angled ~35° across the gem face, fading at both ends
+    const streakAngle = -0.62; // radians
+    const streakLen   = gemSize * 0.38;
+    const streakCos   = Math.cos(streakAngle), streakSin = Math.sin(streakAngle);
+    const s0x = glareX - streakCos * streakLen * 0.35;
+    const s0y = glareY - streakSin * streakLen * 0.35;
+    const s1x = glareX + streakCos * streakLen * 0.65;
+    const s1y = glareY + streakSin * streakLen * 0.65;
+    const streakG = c.createLinearGradient(s0x, s0y, s1x, s1y);
+    streakG.addColorStop(0,    'rgba(255,255,255,0)');
+    streakG.addColorStop(0.25, `rgba(255,255,255,${0.45 * glarePulse})`);
+    streakG.addColorStop(0.55, `rgba(220,240,255,${0.70 * glarePulse})`);
+    streakG.addColorStop(0.80, `rgba(255,255,255,${0.25 * glarePulse})`);
+    streakG.addColorStop(1,    'rgba(255,255,255,0)');
+    c.beginPath(); c.moveTo(s0x, s0y); c.lineTo(s1x, s1y);
+    c.strokeStyle = streakG; c.lineWidth = 1.4; c.lineCap = 'round'; c.stroke();
+
+    // 4. Iridescent colour fringe just below the hot-spot (prism dispersion)
+    const fringeY = glareY + spotR * 1.8;
+    const fringeG = c.createLinearGradient(glareX - spotR * 2, fringeY, glareX + spotR * 2, fringeY);
+    fringeG.addColorStop(0,    'rgba(255,80,80,0)');
+    fringeG.addColorStop(0.25, `rgba(255,160,80,${0.22 * glarePulse})`);
+    fringeG.addColorStop(0.5,  `rgba(80,200,255,${0.28 * glarePulse})`);
+    fringeG.addColorStop(0.75, `rgba(180,80,255,${0.22 * glarePulse})`);
+    fringeG.addColorStop(1,    'rgba(255,80,200,0)');
+    c.fillStyle = fringeG;
+    c.fillRect(glareX - spotR * 2, fringeY - 1.5, spotR * 4, 3);
     c.restore();
 
     // Sparkle stars around gem
