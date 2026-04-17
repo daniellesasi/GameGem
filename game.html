@@ -3750,7 +3750,7 @@ function _drawWinFrame(ts) {
 
     const charCX  = W * 0.5;
     const charR   = Math.min(W * 0.21, H * 0.12, 88);
-    const groundY = H * 0.74;
+    const groundY = H * 0.70;
 
     // Hop
     const bounce = Math.sin(t * 3.8);
@@ -3931,19 +3931,6 @@ function _drawWinFrame(ts) {
     // Floor must be BELOW the character's bottom edge (groundY + charR)
     // so the reflection isn't painted behind the character and hidden.
     const floorY = groundY + charR * 1.05;
-
-    // Iridescent caustic pool on the floor surface (light refracted by gem)
-    c.save();
-    c.globalAlpha = raysAlpha * 0.70;
-    const caustRx = gemSize * 0.85, caustRy = charR * 0.22;
-    const caustG = c.createRadialGradient(charCX, floorY, 0, charCX, floorY, caustRx);
-    caustG.addColorStop(0,   `hsla(${baseHue},           88%, 84%, 0.60)`);
-    caustG.addColorStop(0.4, `hsla(${(baseHue+90)%360},  82%, 74%, 0.30)`);
-    caustG.addColorStop(0.7, `hsla(${(baseHue+180)%360}, 76%, 68%, 0.12)`);
-    caustG.addColorStop(1,   'rgba(0,0,0,0)');
-    c.fillStyle = caustG;
-    c.beginPath(); c.ellipse(charCX, floorY, caustRx, caustRy, 0, 0, Math.PI * 2); c.fill();
-    c.restore();
 
     // Mirror reflection — perspective-compressed to simulate a glossy floor at a grazing angle.
     // kRef < 0.5 squishes everything vertically, bringing the high gem into the visible area
