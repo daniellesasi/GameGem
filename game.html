@@ -3928,16 +3928,18 @@ function _drawWinFrame(ts) {
     c.restore();
 
     // ── Floor caustic + mirror reflection ──────────────────────────────
-    const floorY = groundY + charR * 0.28;
+    // Floor must be BELOW the character's bottom edge (groundY + charR)
+    // so the reflection isn't painted behind the character and hidden.
+    const floorY = groundY + charR * 1.05;
 
-    // Iridescent caustic pool on the floor (light cast by gem)
+    // Iridescent caustic pool on the floor surface (light refracted by gem)
     c.save();
-    c.globalAlpha = raysAlpha * 0.55;
-    const caustRx = gemSize * 0.80, caustRy = charR * 0.18;
+    c.globalAlpha = raysAlpha * 0.70;
+    const caustRx = gemSize * 0.85, caustRy = charR * 0.22;
     const caustG = c.createRadialGradient(charCX, floorY, 0, charCX, floorY, caustRx);
-    caustG.addColorStop(0,   `hsla(${baseHue},           82%, 78%, 0.48)`);
-    caustG.addColorStop(0.4, `hsla(${(baseHue+90)%360},  78%, 72%, 0.24)`);
-    caustG.addColorStop(0.7, `hsla(${(baseHue+180)%360}, 72%, 68%, 0.10)`);
+    caustG.addColorStop(0,   `hsla(${baseHue},           88%, 84%, 0.60)`);
+    caustG.addColorStop(0.4, `hsla(${(baseHue+90)%360},  82%, 74%, 0.30)`);
+    caustG.addColorStop(0.7, `hsla(${(baseHue+180)%360}, 76%, 68%, 0.12)`);
     caustG.addColorStop(1,   'rgba(0,0,0,0)');
     c.fillStyle = caustG;
     c.beginPath(); c.ellipse(charCX, floorY, caustRx, caustRy, 0, 0, Math.PI * 2); c.fill();
@@ -3948,32 +3950,27 @@ function _drawWinFrame(ts) {
     c.beginPath(); c.rect(0, floorY, W, H - floorY); c.clip();
     c.translate(0, 2 * floorY); c.scale(1, -1);
 
-    // Reflected gem
+    // Reflected body blob — charY maps to screen y = 2*floorY - charY (below floor)
     c.save();
-    c.globalAlpha = enterAlpha * 0.30;
-    c.translate(charCX, gemY); c.scale(enterScale, enterScale); c.translate(-charCX, -gemY);
-    _drawWinGemPolygons(c, _winStage, charCX, gemY, gemSize, -gemRot);
-    c.restore();
-
-    // Reflected body blob
-    c.save();
-    c.globalAlpha = enterAlpha * 0.28;
+    c.globalAlpha = enterAlpha * 0.62;
     c.translate(charCX, charY); c.scale(sqX, sqY);
     const refBG = c.createRadialGradient(0, 0, charR * 0.05, 0, 0, charR);
-    refBG.addColorStop(0, hexToRgba(window.PLAYER_COLOR, 0.55));
-    refBG.addColorStop(1, hexToRgba(window.PLAYER_COLOR, 0.08));
+    refBG.addColorStop(0,   hexToRgba(window.PLAYER_COLOR, 0.72));
+    refBG.addColorStop(0.5, hexToRgba(window.PLAYER_COLOR, 0.38));
+    refBG.addColorStop(1,   hexToRgba(window.PLAYER_COLOR, 0.06));
     c.fillStyle = refBG; c.beginPath(); c.arc(0, 0, charR, 0, Math.PI * 2); c.fill();
     c.restore();
 
     c.restore(); // end flip + clip
 
-    // Fade reflection into the black floor
+    // Fade reflection into the black background
     c.save();
-    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 3.2);
-    reflFade.addColorStop(0, 'rgba(0,0,0,0)');
-    reflFade.addColorStop(1, 'rgba(0,0,0,1)');
+    const reflFade = c.createLinearGradient(0, floorY, 0, floorY + charR * 2.8);
+    reflFade.addColorStop(0,    'rgba(0,0,0,0)');
+    reflFade.addColorStop(0.25, 'rgba(0,0,0,0.20)');
+    reflFade.addColorStop(1,    'rgba(0,0,0,1)');
     c.fillStyle = reflFade;
-    c.fillRect(0, floorY, W, charR * 3.2);
+    c.fillRect(0, floorY, W, charR * 2.8);
     c.restore();
     // ───────────────────────────────────────────────────────────────────
 
