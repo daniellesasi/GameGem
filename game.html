@@ -1594,14 +1594,9 @@ function update() {
         const el = document.getElementById('fps-counter');
         if (el) el.textContent = _fpsDisplay + ' FPS';
     }
-    // Smooth the input on touch so direction changes ramp rather than snap.
-    // Desktop lerp=1 (instant) preserves exact mouse tracking.
-    const _sLerp = IS_TOUCH ? 1 - Math.pow(0.85, dt) : 1.0;
-    smoothMouse.x += (rawMouse.x - smoothMouse.x) * _sLerp;
-    smoothMouse.y += (rawMouse.y - smoothMouse.y) * _sLerp;
     const worldM = {
-        x: (smoothMouse.x - canvas.width /2) / camera.zoom + camera.x,
-        y: (smoothMouse.y - canvas.height/2) / camera.zoom + camera.y
+        x: (rawMouse.x - canvas.width /2) / camera.zoom + camera.x,
+        y: (rawMouse.y - canvas.height/2) / camera.zoom + camera.y
     };
 
     player.anim.time += 0.016 * dt;
@@ -1623,6 +1618,11 @@ function update() {
     const oldX = player.x, oldY = player.y;
     if (winPhase === 0) {
         const spot = player._captureSpot;
+        // Momentum lerp — on touch, actual movement velocity ramps toward the
+        // intended step rather than applying it instantly. Creates natural inertia:
+        // direction changes curve instead of snap, deceleration is smooth.
+        // Desktop = 1.0 so mouse control stays exact.
+        const mLerp = IS_TOUCH ? 1 - Math.pow(0.82, dt) : 1.0;
         if (spot && huntedTime <= 0) {
             // Glue effect — 0 at edge, 1 at center, squared for non-linear feel
             const _dDist = Math.hypot(player.x - spot.x, player.y - spot.y);
@@ -1633,16 +1633,24 @@ function update() {
             // Movement speed cut by up to 88%
             const speedMult = 1 - stickyT * 0.88;
             const moveLerp = (1 - Math.pow(1 - 0.025, dt)) * speedMult;
-            player.x += (worldM.x - player.x) * moveLerp;
-            player.y += (worldM.y - player.y) * moveLerp;
+            const intendedX = (worldM.x - player.x) * moveLerp;
+            const intendedY = (worldM.y - player.y) * moveLerp;
+            player._mvx = (player._mvx || 0) + (intendedX - (player._mvx || 0)) * mLerp;
+            player._mvy = (player._mvy || 0) + (intendedY - (player._mvy || 0)) * mLerp;
+            player.x += player._mvx;
+            player.y += player._mvy;
             // Pull toward center — present even at rim
             const pullStrength = stickyT * 0.03 * dt;
             player.x += (spot.x - player.x) * pullStrength;
             player.y += (spot.y - player.y) * pullStrength;
         } else {
             const moveLerp = 1 - Math.pow(1 - 0.025, dt);
-            player.x += (worldM.x - player.x) * moveLerp;
-            player.y += (worldM.y - player.y) * moveLerp;
+            const intendedX = (worldM.x - player.x) * moveLerp;
+            const intendedY = (worldM.y - player.y) * moveLerp;
+            player._mvx = (player._mvx || 0) + (intendedX - (player._mvx || 0)) * mLerp;
+            player._mvy = (player._mvy || 0) + (intendedY - (player._mvy || 0)) * mLerp;
+            player.x += player._mvx;
+            player.y += player._mvy;
         }
     }
     player.vx = player.x - oldX; player.vy = player.y - oldY;
