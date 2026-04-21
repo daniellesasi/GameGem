@@ -18,7 +18,21 @@
             font-family: 'Anton', sans-serif;
         }
         canvas { display: block; position: fixed; inset: 0; }
-        #gameCanvas { filter: contrast(1.04) saturate(1.15); }
+        #gameCanvas { filter: contrast(1.04) saturate(1.15); cursor: none; }
+        #finger-cursor {
+            position: fixed; pointer-events: none; z-index: 9999;
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.75);
+            background: rgba(255,255,255,0.18);
+            transform: translate(-50%, -50%);
+            display: none;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+            transition: width 0.1s, height 0.1s, background 0.1s;
+        }
+        #finger-cursor.pressed {
+            width: 34px; height: 34px;
+            background: rgba(255,255,255,0.35);
+        }
 
         #score-container {
             position: fixed;
@@ -724,6 +738,7 @@
     </div>
 
     <canvas id="gameCanvas"></canvas>
+    <div id="finger-cursor"></div>
 
 <script>
 // ─────────────────────────────────────────────
@@ -1479,6 +1494,8 @@ window.addEventListener('pointermove', e => {
         _joystickUpdateMouse();
     } else if (!IS_TOUCH) {
         rawMouse.x = e.clientX; rawMouse.y = e.clientY;
+        const fc = document.getElementById('finger-cursor');
+        if (fc) { fc.style.left = e.clientX + 'px'; fc.style.top = e.clientY + 'px'; fc.style.display = 'block'; }
     }
 });
 window.addEventListener('pointerdown', e => {
@@ -1487,10 +1504,19 @@ window.addEventListener('pointerdown', e => {
         touchJoystick.baseX = e.clientX; touchJoystick.baseY = e.clientY;
         touchJoystick.knobX = e.clientX; touchJoystick.knobY = e.clientY;
         _joystickUpdateMouse();
+    } else if (!IS_TOUCH) {
+        const fc = document.getElementById('finger-cursor');
+        if (fc) fc.classList.add('pressed');
     }
 });
-window.addEventListener('pointerup',     e => { if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; } });
-window.addEventListener('pointercancel', e => { if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; } });
+window.addEventListener('pointerup', e => {
+    if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; }
+    else if (!IS_TOUCH) { const fc = document.getElementById('finger-cursor'); if (fc) fc.classList.remove('pressed'); }
+});
+window.addEventListener('pointercancel', e => {
+    if (IS_TOUCH && e.isPrimary) { touchJoystick.active = false; rawMouse.x = canvas.width/2; rawMouse.y = canvas.height/2; }
+    else if (!IS_TOUCH) { const fc = document.getElementById('finger-cursor'); if (fc) fc.classList.remove('pressed'); }
+});
 
 // ─────────────────────────────────────────────
 // SDF
