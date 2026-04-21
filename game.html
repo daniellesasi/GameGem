@@ -1134,6 +1134,7 @@ const VIBRANT_LIGHTS = [
 
 let rawMouse    = { x: canvas.width / 2, y: canvas.height / 2 };
 let smoothMouse = { x: canvas.width / 2, y: canvas.height / 2 };
+let desktopCursorScreen = { x: canvas.width / 2, y: canvas.height / 2 };
 let camera   = { x: canvas.width / 2, y: canvas.height / 2, zoom: IS_TOUCH ? 0.155 : 0.25 };
 
 let player = {
@@ -1494,7 +1495,7 @@ window.addEventListener('pointermove', e => {
         touchJoystick.knobY = e.clientY;
         _joystickUpdateMouse();
     } else if (!IS_TOUCH) {
-        rawMouse.x = e.clientX; rawMouse.y = e.clientY;
+        desktopCursorScreen.x = e.clientX; desktopCursorScreen.y = e.clientY;
         const fc = document.getElementById('finger-cursor');
         if (fc) { fc.style.left = e.clientX + 'px'; fc.style.top = e.clientY + 'px'; fc.style.display = 'block'; }
     }
@@ -1611,6 +1612,24 @@ function update() {
     // physics feel consistent across devices. Caps prevent huge jumps on tab-switch.
     const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 16.67, IS_TOUCH ? 3 : 1.5) : 1;
     _lastFrameTime = now;
+    if (!IS_TOUCH) {
+        // Recompute rawMouse each frame as a joystick-style offset from the player's
+        // current screen position so cursor distance = speed (near=slow, far=fast)
+        const DESKTOP_THRESHOLD = 200; // screen-px from player for max speed
+        const playerSx = (player.x - camera.x) * camera.zoom + canvas.width  / 2;
+        const playerSy = (player.y - camera.y) * camera.zoom + canvas.height / 2;
+        const cdx = desktopCursorScreen.x - playerSx;
+        const cdy = desktopCursorScreen.y - playerSy;
+        const cdist = Math.hypot(cdx, cdy);
+        if (cdist < 1) {
+            rawMouse.x = canvas.width  / 2;
+            rawMouse.y = canvas.height / 2;
+        } else {
+            const speed = Math.min(cdist / DESKTOP_THRESHOLD, 1) * 400;
+            rawMouse.x = canvas.width  / 2 + (cdx / cdist) * speed;
+            rawMouse.y = canvas.height / 2 + (cdy / cdist) * speed;
+        }
+    }
     const worldM = {
         x: (rawMouse.x - canvas.width /2) / camera.zoom + camera.x,
         y: (rawMouse.y - canvas.height/2) / camera.zoom + camera.y
