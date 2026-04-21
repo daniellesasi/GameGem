@@ -69,7 +69,7 @@
         /* ── WIN OVERLAY ── */
         #win-overlay {
             position: fixed; inset: 0; background: #000;
-            display: none; flex-direction: column; justify-content: space-between; align-items: center;
+            display: none; flex-direction: column; justify-content: center; align-items: center;
             color: white; z-index: 100;
             opacity: 0; transition: opacity 0.8s ease-in-out;
             padding: 0; text-align: center;
@@ -79,7 +79,7 @@
         }
         #win-ui-top {
             position: relative; z-index: 2;
-            padding: max(env(safe-area-inset-top, 0px), 28px) 24px 20px;
+            padding: 28px 24px 20px;
             display: flex; flex-direction: column; align-items: center; gap: 6px;
         }
         #win-gem-name {
@@ -1651,8 +1651,12 @@ function update() {
     player.wobbleV = (player.wobbleV + (spd*0.6 - player.wobble)*0.2 * dt) * Math.pow(0.85, dt);
     player.wobble += player.wobbleV * dt;
 
-    player.history.unshift({x: player.x, y: player.y});
-    if (player.history.length > 68) player.history.pop();
+    if (spotlightDanger) {
+        player.history.length = 0;
+    } else {
+        player.history.unshift({x: player.x, y: player.y});
+        if (player.history.length > 68) player.history.pop();
+    }
 
     maxLimbDist = player.baseR;
     Object.values(player.currentGrowth).forEach(g => { if (player.baseR+g > maxLimbDist) maxLimbDist = player.baseR+g; });
