@@ -503,7 +503,6 @@
     </style>
 </head>
 <body>
-    <div id="fps-counter" style="position:fixed;top:8px;left:50%;transform:translateX(-50%);color:#0f0;font:bold 14px monospace;z-index:999;pointer-events:none;text-shadow:0 0 4px #000"></div>
     <div id="score-container"><span id="scoreVal">0</span>%</div>
     <div id="eaten-container">ENEMIES EATEN: <span id="eatenVal">0</span></div>
 
@@ -1578,22 +1577,13 @@ function loseAllItems() {
 // ─────────────────────────────────────────────
 // UPDATE
 // ─────────────────────────────────────────────
-let _fpsFrames = 0, _fpsLast = performance.now(), _fpsDisplay = 0;
 let _lastFrameTime = 0;
 function update() {
-    _fpsFrames++;
     const now = performance.now();
     // dt = 1.0 at 60fps (16.67ms/frame), 0.5 at 120fps, 2.0 at 30fps — calibrated to 60fps so
     // physics feel consistent across devices. Caps prevent huge jumps on tab-switch.
     const dt = _lastFrameTime ? Math.min((now - _lastFrameTime) / 16.67, IS_TOUCH ? 3 : 1.5) : 1;
     _lastFrameTime = now;
-    if (now - _fpsLast >= 1000) {
-        _fpsDisplay = _fpsFrames;
-        _fpsFrames = 0;
-        _fpsLast = now;
-        const el = document.getElementById('fps-counter');
-        if (el) el.textContent = _fpsDisplay + ' FPS';
-    }
     const worldM = {
         x: (rawMouse.x - canvas.width /2) / camera.zoom + camera.x,
         y: (rawMouse.y - canvas.height/2) / camera.zoom + camera.y
