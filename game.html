@@ -15,8 +15,9 @@
         body {
             overflow: hidden; background: #020202; touch-action: none;
             -webkit-user-select: none; user-select: none;
-            font-family: 'Anton', sans-serif;
+            font-family: 'Anton', sans-serif; cursor: none;
         }
+        * { cursor: none !important; }
         canvas { display: block; position: fixed; inset: 0; }
         #gameCanvas { filter: contrast(1.04) saturate(1.15); cursor: none; }
         #finger-cursor {
