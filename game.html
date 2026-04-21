@@ -5128,6 +5128,17 @@ function initMainMenu() {
     renderNecklaceMap();
 }
 
+// Dev cheat: ArrowUp = clear current stage, ArrowDown = undo last clear
+window.addEventListener('keydown', e => {
+    const menu = document.getElementById('main-menu');
+    if (!menu || !menu.classList.contains('visible')) return;
+    if (e.key === 'ArrowUp') {
+        if (currentStage <= TOTAL_STAGES) { currentStage++; saveProgress(); renderNecklaceMap(); }
+    } else if (e.key === 'ArrowDown') {
+        if (currentStage > 1) { currentStage--; saveProgress(); renderNecklaceMap(); }
+    }
+});
+
 // When game ends (win or lose), award pearls and return to necklace map
 function returnToMenuAfterGame() {
     // Award pearls for enemies eaten during the game
