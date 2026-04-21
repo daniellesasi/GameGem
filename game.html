@@ -5135,7 +5135,7 @@ window.addEventListener('keydown', e => {
     } else if (e.key === 'u' || e.key === 'U') {
         if (currentStage > 1) { currentStage--; saveMenuState(); renderNecklaceMap(); }
     } else if (e.key === 'p' || e.key === 'P') {
-        totalPearls = 0; saveMenuState(); updatePearlUI();
+        totalPearls = 0; saveMenuState(); updatePearlUI(); renderNecklaceMap();
     }
 });
 
