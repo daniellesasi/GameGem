@@ -5128,12 +5128,14 @@ function initMainMenu() {
     renderNecklaceMap();
 }
 
-// Dev cheat: r = clear next stage, u = undo last clear
+// Dev cheat: r = clear next stage, u = undo last clear, p = empty pearls
 window.addEventListener('keydown', e => {
     if (e.key === 'r' || e.key === 'R') {
         if (currentStage <= TOTAL_STAGES) { currentStage++; saveMenuState(); renderNecklaceMap(); }
     } else if (e.key === 'u' || e.key === 'U') {
         if (currentStage > 1) { currentStage--; saveMenuState(); renderNecklaceMap(); }
+    } else if (e.key === 'p' || e.key === 'P') {
+        totalPearls = 0; saveMenuState(); updatePearlUI();
     }
 });
 
