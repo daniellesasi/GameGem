@@ -1239,7 +1239,7 @@ function spawn(far = true, overrideX, overrideY, type) {
     let chosenType = type;
     if (!chosenType) {
         const r = Math.random();
-        if (r < 0.08 && stagePearlSpawn) chosenType = 'pearl';
+        if (r < 0.04 && stagePearlSpawn) chosenType = 'pearl';
         else chosenType = getLeastUsedItemType(); // Dynamically ensures all items appear evenly
     }
 
