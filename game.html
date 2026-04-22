@@ -56,30 +56,6 @@
             text-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
-        /* ── DANGER METER ── */
-        #danger-bar {
-            position: fixed;
-            bottom: 20px;
-            right: 32px;
-            display: flex; flex-direction: column; align-items: center; gap: 4px;
-            z-index: 20; pointer-events: none;
-        }
-        #danger-label {
-            font-size: clamp(7px, 1.8vw, 10px); font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase;
-            color: rgba(200,50,50,0.8);
-        }
-        #danger-track {
-            width: clamp(8px, 2vw, 12px); height: clamp(80px, 20vw, 120px);
-            background: rgba(255,255,255,0.07); border-radius: 99px;
-            border: 1.5px solid rgba(255,100,100,0.2);
-            overflow: hidden; display: flex; align-items: flex-end;
-        }
-        #danger-fill {
-            width: 100%; height: 0%;
-            background: linear-gradient(0deg, #ff4444, #ff8866);
-            border-radius: 99px; transition: height 0.3s, box-shadow 0.3s;
-        }
 
         /* ── WIN OVERLAY ── */
         #win-overlay {
@@ -530,10 +506,6 @@
         <div class="health-dot"></div>
     </div>
 
-    <div id="danger-bar" style="display:none">
-        <div id="danger-label">⚠</div>
-        <div id="danger-track"><div id="danger-fill"></div></div>
-    </div>
 
     <div id="hunted-bar">
         <div id="hunted-fill"></div>
@@ -823,7 +795,6 @@ const canvas     = document.getElementById('gameCanvas');
 const ctx        = canvas.getContext('2d');
 const scoreEl    = document.getElementById('scoreVal');
 const eatenEl    = document.getElementById('eatenVal');
-const dangerFill = document.getElementById('danger-fill');
 const huntedBar  = document.getElementById('hunted-bar');
 const huntedFill = document.getElementById('hunted-fill');
 const winOverlay = document.getElementById('win-overlay');
@@ -1912,9 +1883,6 @@ function update() {
             }
             if (dist > despawnDist) { const _ne4 = spawnEnemy(); if (_ne4) enemies[idx] = _ne4; else enemies.splice(idx, 1); }
         });
-        const dangerPct = Math.max(0, Math.min(100, (1 - (closestEnemy - 800) / 1700) * 100));
-        dangerFill.style.height    = dangerPct + '%';
-        dangerFill.style.boxShadow = dangerPct > 60 ? `0 0 ${dangerPct/5}px #ff4444` : 'none';
     }
 
     // Reset global danger state each frame
@@ -4502,12 +4470,11 @@ function startGame() {
     document.getElementById('score-container').style.display = '';
     document.getElementById('eaten-container').style.display = '';
     document.getElementById('health-bar').style.display = '';
-    document.getElementById('danger-bar').style.display = _cfg.spotlights ? '' : 'none';
+
 
     // Reset score display
     document.getElementById('scoreVal').textContent = '0';
     document.getElementById('eatenVal').textContent = '0';
-    document.getElementById('danger-fill').style.width = '0%';
     updateHealthUI();
 
     update();
