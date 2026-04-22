@@ -37,8 +37,8 @@
 
         #score-container {
             position: fixed;
-            top: max(env(safe-area-inset-top, 0px), 24px);
-            right: max(env(safe-area-inset-right, 0px), 24px);
+            top: 12px;
+            right: 12px;
             text-align: right; color: #ffffff;
             pointer-events: none;
             font-size: clamp(32px, 8vw, 48px);
@@ -47,8 +47,8 @@
 
         #eaten-container {
             position: fixed;
-            bottom: max(env(safe-area-inset-bottom, 0px), 24px);
-            right: max(env(safe-area-inset-right, 0px), 24px);
+            bottom: 12px;
+            right: 12px;
             color: rgba(255, 255, 255, 0.9);
             pointer-events: none;
             font-size: clamp(20px, 5vw, 30px);
@@ -59,8 +59,8 @@
         /* ── DANGER METER ── */
         #danger-bar {
             position: fixed;
-            bottom: max(env(safe-area-inset-bottom, 0px), 22px);
-            right:  max(env(safe-area-inset-right,  0px), 16px);
+            bottom: 12px;
+            right: 12px;
             display: flex; flex-direction: column; align-items: center; gap: 4px;
             z-index: 20; pointer-events: none;
         }
@@ -136,13 +136,13 @@
         /* ── HEALTH BAR ── */
         #health-bar {
             position: fixed;
-            top: max(env(safe-area-inset-top, 0px), 24px);
-            left: max(env(safe-area-inset-left, 0px), 24px);
+            top: 12px;
+            left: 12px;
             display: flex; gap: 8px; z-index: 25; pointer-events: none;
         }
         #hunted-bar {
             position: fixed;
-            top: calc(max(env(safe-area-inset-top, 0px), 20px) + 55px);
+            top: 67px;
             left: 50%; transform: translateX(-50%);
             width: clamp(150px, 40vw, 300px); height: 8px;
             background: rgba(255,255,255,0.2);
@@ -382,7 +382,7 @@
         .menu-right-buttons {
             position: absolute;
             right: 16px;
-            top: calc(max(env(safe-area-inset-top, 0px), 16px) + 80px);
+            top: 92px;
             display: flex; flex-direction: column; gap: 16px;
             z-index: 2;
         }
@@ -518,16 +518,16 @@
     </style>
 </head>
 <body>
-    <div id="score-container"><span id="scoreVal">0</span>%</div>
-    <div id="eaten-container">ENEMIES EATEN: <span id="eatenVal">0</span></div>
+    <div id="score-container" style="display:none"><span id="scoreVal">0</span>%</div>
+    <div id="eaten-container" style="display:none">ENEMIES EATEN: <span id="eatenVal">0</span></div>
 
-    <div id="health-bar">
+    <div id="health-bar" style="display:none">
         <div class="health-dot"></div>
         <div class="health-dot"></div>
         <div class="health-dot"></div>
     </div>
 
-    <div id="danger-bar">
+    <div id="danger-bar" style="display:none">
         <div id="danger-label">⚠</div>
         <div id="danger-track"><div id="danger-fill"></div></div>
     </div>
@@ -738,7 +738,7 @@
         <button onclick="returnToMenuAfterGame()">CONTINUE</button>
     </div>
 
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" style="display:none"></canvas>
     <div id="finger-cursor"></div>
 
 <script>
