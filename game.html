@@ -331,11 +331,11 @@
         #main-menu.visible { display: flex; }
 
         .menu-top-bar {
-            display: flex; justify-content: space-between; align-items: flex-start;
+            display: flex; justify-content: space-between; align-items: center;
             padding: 12px 16px 0;
             z-index: 2;
         }
-        .menu-top-left { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; }
+        .menu-top-left { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; position: relative; }
         .menu-top-center { display: flex; align-items: center; justify-content: center; flex: 1; }
         .menu-top-right { display: flex; align-items: center; justify-content: flex-end; flex: 1; }
 
@@ -352,8 +352,8 @@
         .heart-timer {
             font-size: 13px; color: rgba(255,255,255,0.8);
             font-family: 'Montserrat', sans-serif; font-weight: 400;
-            margin-top: 4px; letter-spacing: 1.5px;
-            padding-left: 2px;
+            letter-spacing: 1.5px; padding-left: 2px;
+            position: absolute; top: 100%; left: 0; margin-top: 4px; white-space: nowrap;
         }
 
         /* Avatar */
