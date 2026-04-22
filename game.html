@@ -1675,7 +1675,7 @@ function update() {
         player.history.length = 0;
     } else {
         player.history.unshift({x: player.x, y: player.y});
-        if (player.history.length > 68) player.history.pop();
+        if (player.history.length > (IS_TOUCH ? 68 : 110)) player.history.pop();
     }
 
     maxLimbDist = player.baseR;
