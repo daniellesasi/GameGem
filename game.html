@@ -1207,11 +1207,15 @@ function _refreshSDF() {
     _sdfTime2  = player.anim.time * 2;
     // Rebuild bone cache only when bone count changes (cheap check)
     if (_sdfBones.length !== player.bones.length) {
-        _sdfBones = player.bones.map(b => ({ bx:0, by:0, w09: b.w*0.9, w2: b.w*2, w015: b.w*0.15, w008: b.w*0.08, ao: b.ambientOffset }));
+        _sdfBones = player.bones.map(b => ({ bx:0, by:0, w09: b.w*0.9, w2: b.w*2, w015: b.w*0.15, w008: b.w*0.08, ao: b.ambientOffset, poly: null }));
     }
     for (let i = 0; i < player.bones.length; i++) {
         _sdfBones[i].bx = _sdfPx + player.bones[i].curX;
         _sdfBones[i].by = _sdfPy + player.bones[i].curY;
+        // Cache the bone's world-space convex hull polygon (computed in
+        // player.bones.forEach earlier in the frame) so the SDF can trace
+        // the actual gem silhouette instead of a sphere.
+        _sdfBones[i].poly = player.bones[i].polygon;
     }
 }
 
@@ -1561,10 +1565,17 @@ function getSceneSDF(px, py) {
         const cb = _sdfBones[i];
         const dx = px - cb.bx, dy = py - cb.by;
         const fastDist = Math.sqrt(dx*dx + dy*dy);
-        let d2 = fastDist - cb.w09;
-        if (fastDist < cb.w2) {
+        let d2;
+        // When close to the bone and a polygon hull is available, use the
+        // actual gem outline so the silhouette traces faceted shapes
+        // instead of a uniform sphere. Far from the bone, fall back to the
+        // cheap sphere distance to keep ray-march fast.
+        if (cb.poly && cb.poly.length > 2 && fastDist < cb.w2) {
+            d2 = sdPoly(px, py, cb.poly);
             const bn = Math.sin(Math.atan2(dy,dx)*3 + _sdfTime2 + cb.ao) * cb.w015;
             d2 -= cb.w008 + Math.max(0, bn);
+        } else {
+            d2 = fastDist - cb.w09;
         }
         d = smin(d, d2, blendK);
     }
