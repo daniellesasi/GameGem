@@ -4890,6 +4890,53 @@ const NECKLACE_GEMS = [
 const STAGE_TO_GEM = [8, 7, 6, 5, 4, 3, 2, 1, 0, 11, 10, 9];
 const gemForStage = (stageNum) => NECKLACE_GEMS[STAGE_TO_GEM[stageNum - 1]];
 
+// Override in-game item shapes so they use the same polygon data as the
+// necklace gems they represent. Called after gem polygons are defined,
+// overwriting the earlier registerShape() entries.
+function registerShapeFromGem(name, gemPolygons) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const raw = gemPolygons.map(poly => {
+        const pts = poly.pts.trim().split(/\s+|,/).map(Number);
+        const vertices = [];
+        for (let i = 0; i < pts.length; i += 2) {
+            const x = pts[i], y = pts[i + 1];
+            vertices.push({ x, y });
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+        return { color: poly.fill, vertices };
+    });
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    const allPts = [];
+    const parsedPolys = raw.map(p => {
+        const verts = p.vertices.map(v => ({ x: v.x - cx, y: v.y - cy }));
+        allPts.push(...verts);
+        return { color: p.color, vertices: verts };
+    });
+    SHAPE_DATA[name] = {
+        polys: parsedPolys,
+        hull: getConvexHull(allPts),
+        maxDim: Math.max(maxX - minX, maxY - minY)
+    };
+}
+
+registerShapeFromGem('gem',     GEM_GREEN_STAR);
+registerShapeFromGem('shard1',  GEM_DARK_PINK);
+registerShapeFromGem('shard2',  GEM_BLUE_SAPPHIRE);
+registerShapeFromGem('shard3',  GEM_BLUE_HEART);
+registerShapeFromGem('shard4',  GEM_GREEN_MARQUISE);
+registerShapeFromGem('shard5',  GEM_AMETHYST);
+registerShapeFromGem('shard6',  GEM_BLUE_CRYSTAL);
+registerShapeFromGem('custom1', GEM_GARNET);
+registerShapeFromGem('custom2', GEM_SMALL_GREEN);
+registerShapeFromGem('custom3', GEM_AQUAMARINE);
+registerShapeFromGem('custom4', GEM_PEACH_DROP);
+registerShapeFromGem('custom5', GEM_RED_ORANGE);
+// Clear cached rasterizations from the old shape data
+for (const k in _itemCache) delete _itemCache[k];
+
 // Pearl bead positions from actual SVG artwork (center coordinates)
 const PEARL_POSITIONS = [];
 (function() {
