@@ -2560,13 +2560,22 @@ function drawBlob(ctx, x, y, radius, wobblePhase, complexity = 5, irregularity =
 // DRAW
 // ─────────────────────────────────────────────
 function draw() {
-    // Pearl mode: 1s real-time fade from black to near-white, then game-time
-    // 1s fade-out as the effect ends. Real-time fade-in keeps the visual
-    // smooth even when other timers might pause.
+    // Pearl mode: 1s real-time fade from black to near-white. As the effect
+    // ends (last ~1s) the bg flickers between white and black — a dying
+    // fluorescent feel that hints the screen is about to go dark.
     if (huntedTime > 0) {
         const elapsedSec = (performance.now() - _pearlBgFadeStart) / 1000;
-        const fadeIn  = Math.min(1, elapsedSec);
-        const fadeOut = Math.min(1, huntedTime / 60);
+        const fadeIn = Math.min(1, elapsedSec);
+        let fadeOut;
+        if (huntedTime > 60) {
+            fadeOut = 1;
+        } else {
+            // Binary flicker — probability of "white" drops as huntedTime → 0
+            const t = huntedTime / 60; // 1 → 0
+            const slot = Math.floor(performance.now() / 55); // ~18 changes/sec
+            const r = ((slot * 9301 + 49297) % 233280) / 233280;
+            fadeOut = r < t ? 1 : 0;
+        }
         const fade = Math.min(fadeIn, fadeOut);
         const v = Math.round(2 + fade * 248); // peak 250 — near white but keeps edge
         ctx.fillStyle = `rgb(${v},${v},${v})`;
