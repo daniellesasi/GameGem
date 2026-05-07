@@ -844,6 +844,8 @@ let spotlightDanger = false;   // true any frame player is inside any spotlight
 let globalFlickerPhase = 0;    // drives synchronized red flicker on all spotlights
 let huntedTime = 0;
 let _pearlBgFadeStart = 0; // performance.now() when pearl mode started — drives 1s real-time bg fade-in
+let _winAbsorbStart = 0;    // performance.now() when winPhase 1 (absorb) started
+let _winAbsorbDoneTime = 0; // performance.now() when all items finished swallowing during absorb
 let enemiesEaten = 0;
 
 // Stage 7 pearl intro: empty open, then pearl + enemy slide in from outside the frame
@@ -1754,19 +1756,23 @@ function update() {
         coveragePercent = Math.min(100, Math.floor((maxLimbDist / targetWorldRadius) * 100));
         scoreEl.innerText = coveragePercent;
         if (coveragePercent >= 100) {
-            winPhase = 2;
-            const gemName = (playingStage > 0 && playingStage <= NECKLACE_GEMS.length)
-                ? gemForStage(playingStage).name : '';
-            const nextStageNum = (playingStage >= 1 ? playingStage : currentStage) + 1;
-            const stageUnlockMsg = (nextStageNum > currentStage && nextStageNum <= TOTAL_STAGES)
-                ? `<p>STAGE ${nextStageNum} UNLOCKED</p>` : '';
-            document.getElementById('win-gem-name').textContent = gemName ? gemName + ' GEM' : '';
-            document.getElementById('win-stats').innerHTML =
-                stageUnlockMsg +
-                `<p>PEARLS EARNED: <span>${enemiesEaten}</span></p>`;
-            winOverlay.style.display = 'flex';
-            setTimeout(() => { winOverlay.style.opacity = '1'; }, 50);
-            startWinAnim(playingStage > 0 ? playingStage : currentStage);
+            // Enter "absorb" phase — winPhase 1 cranks vacuum range so any
+            // remaining items are pulled in and swallowed before the win
+            // screen appears (1s settle delay after everything is gone).
+            winPhase = 1;
+            _winAbsorbStart = performance.now();
+            _winAbsorbDoneTime = 0;
+        }
+    } else if (winPhase === 1) {
+        // Once nothing's left in the world (no active items, no in-flight
+        // swallow particles), wait 1s and reveal the win screen.
+        const allInactive = items.every(it => !it.active);
+        const fxEmpty = swallowFX.length === 0;
+        if (allInactive && fxEmpty) {
+            if (_winAbsorbDoneTime === 0) _winAbsorbDoneTime = performance.now();
+            else if (performance.now() - _winAbsorbDoneTime >= 1000) _showWinScreen();
+        } else {
+            _winAbsorbDoneTime = 0; // reset if anything reappears
         }
     }
 
@@ -2018,7 +2024,7 @@ function update() {
                         _pearlBgFadeStart = performance.now();
                         haptic([15, 8, 15, 8, 25]); sfxPearl();
                         flashAlpha = 1.2; // big cinematic white flash
-                        setTimeout(() => { items[idx] = spawn(); }, 400);
+                        setTimeout(() => { if (winPhase === 0) items[idx] = spawn(); }, 400);
                     } else {
                     sfxPickup();
                     player.wobbleV += 35;
@@ -2043,7 +2049,7 @@ function update() {
                         isFaceItem: false
                     });
                     player.currentGrowth[target.name] += it.scale * 8;
-                    setTimeout(() => { items[idx] = spawn(); }, 400);
+                    setTimeout(() => { if (winPhase === 0) items[idx] = spawn(); }, 400);
                     }
                 }
             }
@@ -4259,6 +4265,23 @@ function _drawWinFrame(ts) {
     c.restore();
 
     _winRAF = requestAnimationFrame(_drawWinFrame);
+}
+
+function _showWinScreen() {
+    if (winPhase === 2) return; // already shown
+    winPhase = 2;
+    const gemName = (playingStage > 0 && playingStage <= NECKLACE_GEMS.length)
+        ? gemForStage(playingStage).name : '';
+    const nextStageNum = (playingStage >= 1 ? playingStage : currentStage) + 1;
+    const stageUnlockMsg = (nextStageNum > currentStage && nextStageNum <= TOTAL_STAGES)
+        ? `<p>STAGE ${nextStageNum} UNLOCKED</p>` : '';
+    document.getElementById('win-gem-name').textContent = gemName ? gemName + ' GEM' : '';
+    document.getElementById('win-stats').innerHTML =
+        stageUnlockMsg +
+        `<p>PEARLS EARNED: <span>${enemiesEaten}</span></p>`;
+    winOverlay.style.display = 'flex';
+    setTimeout(() => { winOverlay.style.opacity = '1'; }, 50);
+    startWinAnim(playingStage > 0 ? playingStage : currentStage);
 }
 
 function startWinAnim(stageNum) {
