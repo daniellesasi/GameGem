@@ -392,7 +392,7 @@
             flex: 1; display: flex; align-items: center; justify-content: center;
             position: relative; padding: 20px;
             overflow: hidden;
-            perspective: 900px;
+            perspective: 550px; /* tighter perspective = stronger foreshortening = more 3D */
         }
         .necklace-map-container svg {
             width: 100%; max-width: 420px; height: auto;
@@ -401,8 +401,24 @@
             animation: necklaceSway 7s ease-in-out infinite;
         }
         @keyframes necklaceSway {
-            0%, 100% { transform: rotateY(-11deg) rotateX(2deg); }
-            50%      { transform: rotateY( 11deg) rotateX(-2deg); }
+            0%, 100% { transform: rotateY(-15deg) rotateX(3deg); }
+            50%      { transform: rotateY( 15deg) rotateX(-3deg); }
+        }
+        /* Soft highlight that drifts opposite to the tilt — fakes a fixed
+           light source bouncing off the gems as they rotate. */
+        .necklace-map-container::after {
+            content: '';
+            position: absolute;
+            inset: -10%;
+            pointer-events: none;
+            background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0) 38%);
+            mix-blend-mode: screen;
+            animation: necklaceShine 7s ease-in-out infinite;
+            will-change: transform;
+        }
+        @keyframes necklaceShine {
+            0%, 100% { transform: translateX(28%); }
+            50%      { transform: translateX(-28%); }
         }
 
         .gem-node {
