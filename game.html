@@ -140,22 +140,13 @@
         }
         .health-lost { opacity: 0.2; transform: scale(0.5); }
 
-        /* Pearl mode: bg goes near-white, so any white HUD text becomes
-           invisible. Switch the in-game HUD to bright pink. */
+        /* Pearl mode: bg goes near-white, so white HUD text becomes
+           invisible. Switch the in-game HUD to flashy pink (no glow). */
         body.pearl-mode #score-container,
-        body.pearl-mode #eaten-container {
-            color: #ff3ea0;
-            text-shadow: 0 0 10px rgba(255, 62, 160, 0.55);
-        }
-        body.pearl-mode .health-dot {
-            background: #ff3ea0;
-            box-shadow: 0 0 10px rgba(255, 62, 160, 0.6);
-        }
-        body.pearl-mode #hunted-fill {
-            background: #ff3ea0;
-            box-shadow: 0 0 12px #ff3ea0;
-        }
-        body.pearl-mode #danger-label { color: #ff3ea0; }
+        body.pearl-mode #eaten-container { color: #ff63fd; }
+        body.pearl-mode .health-dot { background: #ff63fd; box-shadow: none; }
+        body.pearl-mode #hunted-fill { background: #ff63fd; box-shadow: none; }
+        body.pearl-mode #danger-label { color: #ff63fd; }
 
         /* ── CUSTOMIZER OVERLAY ── */
         #customizer-overlay {
@@ -846,6 +837,17 @@ let globalFlickerPhase = 0;    // drives synchronized red flicker on all spotlig
 let huntedTime = 0;
 let _pearlBgFadeStart = 0; // performance.now() when pearl mode started — drives 1s real-time bg fade-in
 let enemiesEaten = 0;
+
+// Stage 7 pearl intro: empty open, then pearl + enemy slide in from outside the frame
+const PEARL_INTRO = { OPENING_DUR: 120, SPAWNING_DUR: 60 }; // 2s empty, 1s slide-in
+const pearlIntro = {
+    phase: 'idle', // 'idle' | 'opening' | 'spawning' | 'done'
+    timer: 0,
+    pearl: null,
+    enemy: null,
+    pearlStart: { x: 0, y: 0 }, pearlTarget: { x: 0, y: 0 },
+    enemyStart: { x: 0, y: 0 }, enemyTarget: { x: 0, y: 0 }
+};
 
 let bombSparks = [];
 let hitSplashes = [];
@@ -2072,8 +2074,60 @@ function update() {
         }
     }
 
+    _tickPearlIntro(dt);
+
     draw();
     if (winPhase < 2 || (winPhase === 3 && deathTimer < DEATH_DUR)) requestAnimationFrame(update);
+}
+
+function _tickPearlIntro(dt) {
+    if (pearlIntro.phase === 'idle' || pearlIntro.phase === 'done') return;
+    pearlIntro.timer += dt;
+
+    if (pearlIntro.phase === 'opening') {
+        if (pearlIntro.timer >= PEARL_INTRO.OPENING_DUR) {
+            // Spawn pearl + enemy outside the visible frame, then lerp them in
+            const viewR = Math.hypot(canvas.width / camera.zoom, canvas.height / camera.zoom) / 2;
+            const startDist = viewR * 1.15; // just outside view
+            const endDist   = viewR * 0.5;
+            const pAng = -Math.PI * 0.35; // upper-right
+            const eAng = -Math.PI * 0.65; // upper-left
+            pearlIntro.pearlStart  = { x: player.x + Math.cos(pAng) * startDist, y: player.y + Math.sin(pAng) * startDist };
+            pearlIntro.pearlTarget = { x: player.x + Math.cos(pAng) * endDist,   y: player.y + Math.sin(pAng) * endDist };
+            pearlIntro.enemyStart  = { x: player.x + Math.cos(eAng) * startDist, y: player.y + Math.sin(eAng) * startDist };
+            pearlIntro.enemyTarget = { x: player.x + Math.cos(eAng) * endDist,   y: player.y + Math.sin(eAng) * endDist };
+            const p = spawn(false, pearlIntro.pearlStart.x, pearlIntro.pearlStart.y, 'pearl');
+            if (p) { items.push(p); pearlIntro.pearl = p; }
+            const en = spawnEnemy();
+            if (en) { en.x = pearlIntro.enemyStart.x; en.y = pearlIntro.enemyStart.y; en.vx = 0; en.vy = 0; enemies.push(en); pearlIntro.enemy = en; }
+            pearlIntro.phase = 'spawning';
+            pearlIntro.timer = 0;
+        }
+        return;
+    }
+
+    if (pearlIntro.phase === 'spawning') {
+        const t = Math.min(pearlIntro.timer / PEARL_INTRO.SPAWNING_DUR, 1);
+        const ease = t * t * (3 - 2 * t);
+        if (pearlIntro.pearl) {
+            pearlIntro.pearl.x = pearlIntro.pearlStart.x + (pearlIntro.pearlTarget.x - pearlIntro.pearlStart.x) * ease;
+            pearlIntro.pearl.y = pearlIntro.pearlStart.y + (pearlIntro.pearlTarget.y - pearlIntro.pearlStart.y) * ease;
+        }
+        if (pearlIntro.enemy) {
+            pearlIntro.enemy.x  = pearlIntro.enemyStart.x + (pearlIntro.enemyTarget.x - pearlIntro.enemyStart.x) * ease;
+            pearlIntro.enemy.y  = pearlIntro.enemyStart.y + (pearlIntro.enemyTarget.y - pearlIntro.enemyStart.y) * ease;
+            pearlIntro.enemy.vx = 0; pearlIntro.enemy.vy = 0; // cancel AI accumulated velocity each frame
+        }
+        if (t >= 1) {
+            // Populate the rest of the stage with normal items + enemies
+            const _cfg = STAGE_CONFIG[playingStage - 1];
+            const _ic = IS_TOUCH ? Math.min(_cfg.itemCount || 25, 25) : (_cfg.itemCount || 25);
+            for (let i = 0; i < _ic; i++) items.push(spawn(i > 5));
+            stageItemTypes.forEach(t => items.push(spawn(false, undefined, undefined, t)));
+            for (let i = enemies.length; i < 6; i++) { const e = spawnEnemy(); if (e) enemies.push(e); }
+            pearlIntro.phase = 'done';
+        }
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -4484,19 +4538,26 @@ function startGame() {
     stagePearlSpawn = _cfg.pearlSpawn;
     stageItemScale  = _cfg.itemScale || 1;
 
-    // Re-seed items — cap at 25 on mobile to keep 60fps
+    // Re-seed items — cap at 25 on mobile to keep 60fps. Tutorial stage opens
+    // empty; the intro tick spawns pearl + enemy and populates the rest later.
     const _itemCount = IS_TOUCH ? Math.min(_cfg.itemCount || 25, 25) : (_cfg.itemCount || 25);
     items.length = 0;
     swallowFX.length = 0;
-    for (let i = 0; i < _itemCount; i++) items.push(spawn(i > 5));
-    // Guarantee at least one of each unlocked type near the player
-    stageItemTypes.forEach(t => items.push(spawn(false, undefined, undefined, t)));
+    if (!_cfg.isPearlIntro) {
+        for (let i = 0; i < _itemCount; i++) items.push(spawn(i > 5));
+        stageItemTypes.forEach(t => items.push(spawn(false, undefined, undefined, t)));
+    }
 
-    // Re-seed enemies (or leave empty for early stages)
+    // Re-seed enemies (or leave empty for early stages / tutorial)
     enemies.length = 0;
-    if (stageEnemyTypes.length > 0) {
+    if (stageEnemyTypes.length > 0 && !_cfg.isPearlIntro) {
         for (let i = 0; i < 6; i++) { const e = spawnEnemy(); if (e) enemies.push(e); }
     }
+
+    pearlIntro.phase = _cfg.isPearlIntro ? 'opening' : 'idle';
+    pearlIntro.timer = 0;
+    pearlIntro.pearl = null;
+    pearlIntro.enemy = null;
 
     // Re-seed spotlights
     spotlights.length = 0;
@@ -4557,7 +4618,7 @@ const STAGE_CONFIG = [
     /* 4  Kunzite     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5'],                                                                                    itemCount: 33, itemScale: 1.5, enemyTypes: [],                            spotlights: true,  pearlSpawn: false },
     /* 5  Topaz       */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3'],                                                                         itemCount: 30, itemScale: 1.3, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: false },
     /* 6  Garnet      */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1'],                                                              itemCount: 28, itemScale: 1.2, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: false },
-    /* 7  Citrine     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4'],                                                   itemCount: 26, itemScale: 1.1, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: true  },
+    /* 7  Citrine     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4'],                                                   itemCount: 26, itemScale: 1.1, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: true,  isPearlIntro: true },
     /* 8  Sapphire    */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2'],                                         itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1'],             spotlights: true,  pearlSpawn: true  },
     /* 9  Jade        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem'],                                  itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1'],             spotlights: false, pearlSpawn: false },
     /* 10 Ruby        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1'],                        itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1', 'standard'], spotlights: true,  pearlSpawn: true  },
@@ -5149,6 +5210,11 @@ function openCustomizer() {
 function returnToMenu() {
     document.getElementById('customizer-overlay').style.display = 'none';
     document.getElementById('main-menu').classList.add('visible');
+    pearlIntro.phase = 'idle';
+    pearlIntro.timer = 0;
+    pearlIntro.pearl = null;
+    pearlIntro.enemy = null;
+    document.body.classList.remove('pearl-mode');
     updateAvatarColor();
     updatePearlUI();
     renderNecklaceMap();
