@@ -3406,13 +3406,12 @@ function draw() {
             const hue = (baseHue + i * (360 / rayCount) + Math.sin(t * 1.2 + i) * 30) % 360;
 
             // Draw ray as a thin line with gradient stroke — no hard edges.
-            // Saturated mid-lightness colors so they read on both black and
-            // white backgrounds without 'screen' blend tricks.
+            // Soft pastel iridescent — high lightness, mid saturation.
             const grad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
-            grad.addColorStop(0,    `hsla(${hue},                90%, 55%, ${fade * 0.85 * pulse})`);
-            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360},   95%, 50%, ${fade * 0.65 * pulse})`);
-            grad.addColorStop(0.5,  `hsla(${(hue + 80) % 360},   90%, 45%, ${fade * 0.3  * pulse})`);
-            grad.addColorStop(1,    `hsla(${(hue + 120) % 360},  85%, 45%, 0)`);
+            grad.addColorStop(0,    `hsla(${hue},                70%, 80%, ${fade * 0.6  * pulse})`);
+            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360},   65%, 78%, ${fade * 0.45 * pulse})`);
+            grad.addColorStop(0.5,  `hsla(${(hue + 80) % 360},   55%, 75%, ${fade * 0.2  * pulse})`);
+            grad.addColorStop(1,    `hsla(${(hue + 120) % 360},  50%, 75%, 0)`);
 
             // Fine line stroke instead of triangle — no visible hard edges
             ctx.beginPath();
@@ -3423,13 +3422,13 @@ function draw() {
             ctx.lineCap = 'round';
             ctx.stroke();
 
-            // Even finer bright core — saturated iridescent tint
+            // Even finer bright core — soft pastel iridescent tint
             if (pulse > 0.5) {
-                const coreA = fade * 0.7 * (pulse - 0.5) * 2;
+                const coreA = fade * 0.55 * (pulse - 0.5) * 2;
                 const coreGrad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
-                coreGrad.addColorStop(0,   `hsla(${(hue + 20) % 360}, 100%, 60%, ${coreA})`);
-                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360},  95%, 55%, ${coreA * 0.5})`);
-                coreGrad.addColorStop(1,   `hsla(${(hue + 100) % 360}, 90%, 50%, 0)`);
+                coreGrad.addColorStop(0,   `hsla(${(hue + 20) % 360}, 60%, 85%, ${coreA})`);
+                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360}, 55%, 80%, ${coreA * 0.5})`);
+                coreGrad.addColorStop(1,   `hsla(${(hue + 100) % 360}, 50%, 78%, 0)`);
                 ctx.beginPath();
                 ctx.moveTo(edgeX, edgeY);
                 ctx.lineTo(innerX, innerY);
