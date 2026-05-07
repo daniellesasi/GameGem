@@ -2186,10 +2186,10 @@ function _getItemCache(type, grayscale) {
         return '#' + l + l + l;
     };
 
-    // Render the cache at 3× pixel density (9× pixel area) so the polygons
+    // Render the cache at 5× pixel density (25× pixel area) so the polygons
     // have plenty of detail when scaled up. The logical "display size" stays
     // = baseSize so on-screen footprint is unchanged.
-    const SUPERSAMPLE = 3;
+    const SUPERSAMPLE = 5;
     const pad = 4;
     const baseSize = shape.maxDim + pad * 2;
     const canvasSize = baseSize * SUPERSAMPLE;
