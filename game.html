@@ -2613,90 +2613,6 @@ function draw() {
         entityCtx.translate(-player.x, -player.y);
     }
 
-    // Items render BEFORE the player body, so when a gem overlaps the
-    // player on its way in, the body covers the gem instead of the gem
-    // covering the body (and the face features sitting on top of it).
-    items.forEach(it => {
-        if (!it.active) return;
-        const dm = Math.hypot(player.x-it.x, (player.y-15)-it.y);
-        entityCtx.save();
-        const _t = player.anim.time;
-        // Rotation: two independent waves so the rock never feels periodic
-        const floatRot = it.type !== 'pearl'
-            ? 0.045 * Math.sin(_t * (it.rotSpeed  || 0.8) + (it.rotPhase   || 0))
-            + 0.025 * Math.sin(_t * (it.rotSpeed  || 0.8) * 1.73 + (it.rotPhase || 0) + 1.9)
-            : 0;
-        entityCtx.translate(it.x,it.y); entityCtx.rotate(it.rot + floatRot);
-        const sc = Math.max(0.1, it.sucking > 0.1 ? Math.min(1,dm/400) : 1);
-        // Scale: two waves at different speeds so the breath feels irregular
-        const floatScale = it.type !== 'pearl'
-            ? 1 + (it.floatAmp  || 0.07) * Math.sin(_t * (it.floatSpeed  || 1.0) + (it.floatPhase  || 0))
-            + (it.floatAmp  || 0.07) * 0.45 * Math.sin(_t * (it.floatSpeed2 || 0.6) + (it.floatPhase2 || 0))
-            : 1;
-        entityCtx.scale(sc * floatScale, sc * floatScale);
-        entityCtx.globalAlpha = 1;
-
-        if (it.type === 'pearl') {
-            const t = player.anim.time;
-            const pearlR = it.w * 0.42;
-
-            // Outer pulsing rainbow aura
-            const auraR = pearlR * (1.6 + 0.3 * Math.sin(t * 4));
-            const auraGrad = entityCtx.createRadialGradient(0, 0, pearlR * 0.5, 0, 0, auraR);
-            const hueShift = (t * 60) % 360;
-            auraGrad.addColorStop(0, `hsla(${hueShift}, 80%, 85%, 0.4)`);
-            auraGrad.addColorStop(0.5, `hsla(${(hueShift + 120) % 360}, 90%, 75%, 0.2)`);
-            auraGrad.addColorStop(1, `hsla(${(hueShift + 240) % 360}, 80%, 80%, 0)`);
-            entityCtx.fillStyle = auraGrad;
-            entityCtx.beginPath();
-            entityCtx.arc(0, 0, auraR, 0, Math.PI * 2);
-            entityCtx.fill();
-
-            // Draw the base pearl
-            draw3DItem(entityCtx, it, it.x, it.y, true);
-
-            // Iridescent holographic overlay (TCGP style)
-            entityCtx.save();
-            entityCtx.globalCompositeOperation = 'overlay';
-            // Sweeping diagonal gradient that shifts with time
-            const sweepAngle = t * 1.5;
-            const sweepLen = pearlR * 1.2;
-            const gx = Math.cos(sweepAngle) * sweepLen;
-            const gy = Math.sin(sweepAngle) * sweepLen;
-            const holoGrad = entityCtx.createLinearGradient(-gx, -gy, gx, gy);
-            const h1 = (t * 80) % 360;
-            holoGrad.addColorStop(0, `hsla(${h1}, 100%, 70%, 0.35)`);
-            holoGrad.addColorStop(0.25, `hsla(${(h1 + 90) % 360}, 100%, 75%, 0.3)`);
-            holoGrad.addColorStop(0.5, `hsla(${(h1 + 180) % 360}, 100%, 70%, 0.35)`);
-            holoGrad.addColorStop(0.75, `hsla(${(h1 + 270) % 360}, 100%, 75%, 0.3)`);
-            holoGrad.addColorStop(1, `hsla(${h1}, 100%, 70%, 0.35)`);
-            entityCtx.fillStyle = holoGrad;
-            entityCtx.beginPath();
-            entityCtx.arc(0, 0, pearlR, 0, Math.PI * 2);
-            entityCtx.fill();
-            entityCtx.restore();
-
-            // Specular highlight that moves with time
-            entityCtx.save();
-            entityCtx.globalCompositeOperation = 'screen';
-            const specX = Math.cos(t * 2) * pearlR * 0.3;
-            const specY = Math.sin(t * 2.5) * pearlR * 0.3 - pearlR * 0.15;
-            const specGrad = entityCtx.createRadialGradient(specX, specY, 0, specX, specY, pearlR * 0.5);
-            specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
-            specGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
-            specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-            entityCtx.fillStyle = specGrad;
-            entityCtx.beginPath();
-            entityCtx.arc(0, 0, pearlR, 0, Math.PI * 2);
-            entityCtx.fill();
-            entityCtx.restore();
-
-        } else {
-            draw3DItem(entityCtx, it, it.x, it.y, true);
-        }
-        entityCtx.restore();
-    });
-
     player.particles.forEach(p => {
         entityCtx.strokeStyle = `rgba(255,255,255,${p.life*0.3})`;
         entityCtx.lineWidth = p.w;
@@ -2900,6 +2816,88 @@ function draw() {
         entityCtx.stroke();
         entityCtx.restore();
     });
+
+    items.forEach(it => {
+        if (!it.active) return;
+        const dm = Math.hypot(player.x-it.x, (player.y-15)-it.y);
+        entityCtx.save();
+        const _t = player.anim.time;
+        // Rotation: two independent waves so the rock never feels periodic
+        const floatRot = it.type !== 'pearl'
+            ? 0.045 * Math.sin(_t * (it.rotSpeed  || 0.8) + (it.rotPhase   || 0))
+            + 0.025 * Math.sin(_t * (it.rotSpeed  || 0.8) * 1.73 + (it.rotPhase || 0) + 1.9)
+            : 0;
+        entityCtx.translate(it.x,it.y); entityCtx.rotate(it.rot + floatRot);
+        const sc = Math.max(0.1, it.sucking > 0.1 ? Math.min(1,dm/400) : 1);
+        // Scale: two waves at different speeds so the breath feels irregular
+        const floatScale = it.type !== 'pearl'
+            ? 1 + (it.floatAmp  || 0.07) * Math.sin(_t * (it.floatSpeed  || 1.0) + (it.floatPhase  || 0))
+            + (it.floatAmp  || 0.07) * 0.45 * Math.sin(_t * (it.floatSpeed2 || 0.6) + (it.floatPhase2 || 0))
+            : 1;
+        entityCtx.scale(sc * floatScale, sc * floatScale);
+        entityCtx.globalAlpha = 1;
+
+        if (it.type === 'pearl') {
+            const t = player.anim.time;
+            const pearlR = it.w * 0.42;
+
+            // Outer pulsing rainbow aura
+            const auraR = pearlR * (1.6 + 0.3 * Math.sin(t * 4));
+            const auraGrad = entityCtx.createRadialGradient(0, 0, pearlR * 0.5, 0, 0, auraR);
+            const hueShift = (t * 60) % 360;
+            auraGrad.addColorStop(0, `hsla(${hueShift}, 80%, 85%, 0.4)`);
+            auraGrad.addColorStop(0.5, `hsla(${(hueShift + 120) % 360}, 90%, 75%, 0.2)`);
+            auraGrad.addColorStop(1, `hsla(${(hueShift + 240) % 360}, 80%, 80%, 0)`);
+            entityCtx.fillStyle = auraGrad;
+            entityCtx.beginPath();
+            entityCtx.arc(0, 0, auraR, 0, Math.PI * 2);
+            entityCtx.fill();
+
+            // Draw the base pearl
+            draw3DItem(entityCtx, it, it.x, it.y, true);
+
+            // Iridescent holographic overlay (TCGP style)
+            entityCtx.save();
+            entityCtx.globalCompositeOperation = 'overlay';
+            // Sweeping diagonal gradient that shifts with time
+            const sweepAngle = t * 1.5;
+            const sweepLen = pearlR * 1.2;
+            const gx = Math.cos(sweepAngle) * sweepLen;
+            const gy = Math.sin(sweepAngle) * sweepLen;
+            const holoGrad = entityCtx.createLinearGradient(-gx, -gy, gx, gy);
+            const h1 = (t * 80) % 360;
+            holoGrad.addColorStop(0, `hsla(${h1}, 100%, 70%, 0.35)`);
+            holoGrad.addColorStop(0.25, `hsla(${(h1 + 90) % 360}, 100%, 75%, 0.3)`);
+            holoGrad.addColorStop(0.5, `hsla(${(h1 + 180) % 360}, 100%, 70%, 0.35)`);
+            holoGrad.addColorStop(0.75, `hsla(${(h1 + 270) % 360}, 100%, 75%, 0.3)`);
+            holoGrad.addColorStop(1, `hsla(${h1}, 100%, 70%, 0.35)`);
+            entityCtx.fillStyle = holoGrad;
+            entityCtx.beginPath();
+            entityCtx.arc(0, 0, pearlR, 0, Math.PI * 2);
+            entityCtx.fill();
+            entityCtx.restore();
+
+            // Specular highlight that moves with time
+            entityCtx.save();
+            entityCtx.globalCompositeOperation = 'screen';
+            const specX = Math.cos(t * 2) * pearlR * 0.3;
+            const specY = Math.sin(t * 2.5) * pearlR * 0.3 - pearlR * 0.15;
+            const specGrad = entityCtx.createRadialGradient(specX, specY, 0, specX, specY, pearlR * 0.5);
+            specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+            specGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)');
+            specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            entityCtx.fillStyle = specGrad;
+            entityCtx.beginPath();
+            entityCtx.arc(0, 0, pearlR, 0, Math.PI * 2);
+            entityCtx.fill();
+            entityCtx.restore();
+
+        } else {
+            draw3DItem(entityCtx, it, it.x, it.y, true);
+        }
+        entityCtx.restore();
+    });
+
 
     entityCtx.restore();
 
