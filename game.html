@@ -1553,7 +1553,10 @@ function getSceneSDF(px, py) {
         d = smin(d, Math.sqrt((px-(_sdfPx+60))**2 + (py-_sdfPy)**2) - (_sdfBaseR08+_sdfCheek), 40);
     }
     const ia = Math.atan2(py-_sdfPy, px-_sdfPx);
-    const blendK = (ia > -Math.PI*0.75 && ia < -Math.PI*0.25) ? 10 : 25;
+    // Lower blendK = sharper merge between bones and body, so the gem
+    // shapes show through the silhouette instead of melting into one
+    // round blob. Top region (where the face is) stays a touch smoother.
+    const blendK = (ia > -Math.PI*0.75 && ia < -Math.PI*0.25) ? 5 : 10;
     for (let i = 0; i < _sdfBones.length; i++) {
         const cb = _sdfBones[i];
         const dx = px - cb.bx, dy = py - cb.by;
