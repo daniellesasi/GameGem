@@ -14,6 +14,9 @@
     .stage-tag.empty { background: #333; color: #888; }
     .gem-svg { width: 140px; height: 140px; margin: 8px 0; }
     .name { font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; text-align: center; color: #888; }
+    .item-info { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: #aaa; margin-bottom: 6px; }
+    .item-swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); }
+    .item-info code { background: #111; padding: 2px 6px; border-radius: 3px; color: #ddd; font-family: monospace; }
     .rename { width: 100%; box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 6px 8px; border-radius: 6px; font-size: 13px; margin-bottom: 6px; text-align: center; }
     .rename:focus { border-color: #6cd76a; outline: none; }
     select { background: #111; color: #eee; border: 1px solid #444; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
@@ -240,19 +243,21 @@ const GEM_DARK_PINK = [
     {pts:b3("181.7,399.62 174.57,422.03 159.15,413.17"), fill:"#952e2d"},
 ];
 
+// Each gem also has an item-type associated (the in-game collectible introduced
+// at that gem's original stage). Hex is the gem-color comment from STAGE_CONFIG.
 const GEMS = [
-    { name: 'Green Star',     polygons: GEM_GREEN_STAR },
-    { name: 'Blue Sapphire',  polygons: GEM_BLUE_SAPPHIRE },
-    { name: 'Peach Drop',     polygons: GEM_PEACH_DROP },
-    { name: 'Garnet Hex',     polygons: GEM_GARNET },
-    { name: 'Aquamarine',     polygons: GEM_AQUAMARINE },
-    { name: 'Amethyst',       polygons: GEM_AMETHYST },
-    { name: 'Blue Crystal',   polygons: GEM_BLUE_CRYSTAL },
-    { name: 'Blue Heart',     polygons: GEM_BLUE_HEART },
-    { name: 'Green Marquise', polygons: GEM_GREEN_MARQUISE },
-    { name: 'Small Green',    polygons: GEM_SMALL_GREEN },
-    { name: 'Red Orange',     polygons: GEM_RED_ORANGE },
-    { name: 'Dark Pink',      polygons: GEM_DARK_PINK },
+    { name: 'Green Star',     polygons: GEM_GREEN_STAR,     itemType: 'gem',     hex: '#80d6a8' },
+    { name: 'Blue Sapphire',  polygons: GEM_BLUE_SAPPHIRE,  itemType: 'shard2',  hex: '#7aa1f6' },
+    { name: 'Peach Drop',     polygons: GEM_PEACH_DROP,     itemType: 'custom4', hex: '#f0ceaa' },
+    { name: 'Garnet Hex',     polygons: GEM_GARNET,         itemType: 'custom1', hex: '#572e42' },
+    { name: 'Aquamarine',     polygons: GEM_AQUAMARINE,     itemType: 'custom3', hex: '#a9e2ff' },
+    { name: 'Amethyst',       polygons: GEM_AMETHYST,       itemType: 'shard5',  hex: '#f3cafa' },
+    { name: 'Blue Crystal',   polygons: GEM_BLUE_CRYSTAL,   itemType: 'shard6',  hex: '#eee8d2' },
+    { name: 'Blue Heart',     polygons: GEM_BLUE_HEART,     itemType: 'shard3',  hex: '#ad9f7b' },
+    { name: 'Green Marquise', polygons: GEM_GREEN_MARQUISE, itemType: 'shard4',  hex: '#3fd634' },
+    { name: 'Small Green',    polygons: GEM_SMALL_GREEN,    itemType: 'custom2', hex: '#d7c97c' },
+    { name: 'Red Orange',     polygons: GEM_RED_ORANGE,     itemType: 'custom5', hex: '#dd5b36' },
+    { name: 'Dark Pink',      polygons: GEM_DARK_PINK,      itemType: 'shard1',  hex: '#b46874' },
 ];
 
 function getBounds(polygons) {
@@ -298,6 +303,11 @@ function render() {
             <div class="${tagClass}">${tagText}</div>
             ${makeGemSvg(gem.polygons)}
             <div class="name">orig: ${gem.name}</div>
+            <div class="item-info">
+                <span class="item-swatch" style="background:${gem.hex}"></span>
+                <code>${gem.itemType}</code>
+                <span style="opacity:0.6">${gem.hex}</span>
+            </div>
             <input class="rename" type="text" data-gem="${gIdx}" value="${renames[gIdx].replace(/"/g, '&quot;')}" placeholder="Rename this gem"/>
             <select data-gem="${gIdx}">
                 <option value="0">— pick stage —</option>
@@ -354,9 +364,18 @@ function renderSummary() {
     if (assignments.every(a => a > 0)) {
         const map = new Array(12);
         for (let stage = 1; stage <= 12; stage++) map[stage - 1] = assignments.indexOf(stage);
+        // Accumulating per-stage itemTypes — each stage adds its gem's item type
+        const itemLines = [];
+        const acc = [];
+        for (let stage = 1; stage <= 12; stage++) {
+            acc.push(GEMS[map[stage - 1]].itemType);
+            itemLines.push(`  /* ${stage}  ${renames[map[stage - 1]]} */ [${acc.map(t => `'${t}'`).join(', ')}],`);
+        }
         out.textContent =
             'const STAGE_TO_GEM = [' + map.join(', ') + '];\n' +
-            '// stage N (1-indexed) displays NECKLACE_GEMS[STAGE_TO_GEM[N-1]]' +
+            '// stage N (1-indexed) displays NECKLACE_GEMS[STAGE_TO_GEM[N-1]]\n\n' +
+            '// Per-stage itemTypes (accumulating, color-matched to the new gem order):\n' +
+            'const STAGE_ITEM_TYPES = [\n' + itemLines.join('\n') + '\n];' +
             renamesBlock;
     } else {
         const filled = assignments.filter(a => a > 0).length;
