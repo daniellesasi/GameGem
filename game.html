@@ -811,13 +811,6 @@ const entityCtx    = entityCanvas.getContext('2d');
 const lightCanvas  = document.createElement('canvas');
 const lightCtx     = lightCanvas.getContext('2d');
 
-// High-quality bilinear smoothing on every context so face PNGs and the
-// supersampled gem cache scale cleanly instead of pixelating.
-[ctx, entityCtx, lightCtx].forEach(c => {
-    c.imageSmoothingEnabled = true;
-    c.imageSmoothingQuality = 'high';
-});
-
 let _stage1BgGrad = null; // cached once, invalidated on resize
 function resizeCanvas() {
     canvas.width = entityCanvas.width = lightCanvas.width  = window.innerWidth;
@@ -2171,21 +2164,13 @@ function _getItemCache(type, grayscale) {
         return '#' + l + l + l;
     };
 
-    // Render the cache at higher pixel density (supersample) so that
-    // high-scale items downscale to a crisp result instead of blocky
-    // pixels. Logical display size stays = baseSize; only source detail
-    // is denser. draw3DItem must use the explicit dw/dh form to lock
-    // the display size to baseSize regardless of canvas resolution.
-    const SUPERSAMPLE = 3;
     const pad = 4;
     const baseSize = shape.maxDim + pad * 2;
-    const canvasSize = baseSize * SUPERSAMPLE;
     const off = document.createElement('canvas');
-    off.width = off.height = Math.ceil(canvasSize);
+    off.width = off.height = Math.ceil(baseSize);
     const oc = off.getContext('2d');
-    oc.imageSmoothingEnabled = true;
-    oc.translate(canvasSize / 2, canvasSize / 2);
-    const sc = canvasSize / (shape.maxDim / 2.2) * 0.5;
+    oc.translate(baseSize / 2, baseSize / 2);
+    const sc = baseSize / (shape.maxDim / 2.2) * 0.5;
     oc.scale(sc, sc);
     shape.polys.forEach(poly => {
         oc.fillStyle = getCol(poly.color);
@@ -2193,7 +2178,7 @@ function _getItemCache(type, grayscale) {
         poly.vertices.forEach((v, i) => { if(i===0) oc.moveTo(v.x, v.y); else oc.lineTo(v.x, v.y); });
         oc.closePath(); oc.fill();
     });
-    _itemCache[key] = { canvas: off, size: baseSize, renderSize: baseSize / (sc / SUPERSAMPLE) };
+    _itemCache[key] = { canvas: off, size: baseSize, renderSize: baseSize / sc };
     return _itemCache[key];
 }
 
@@ -2205,9 +2190,7 @@ function draw3DItem(c, obj, wx, wy, applyGradientLight = false, grayscale = fals
         const half = cached.size * 0.5;
         c.save();
         c.scale(drawScale, drawScale);
-        // Lock display to logical size so a supersampled cache canvas (which
-        // is N× the pixel count) still draws at the same on-screen footprint.
-        c.drawImage(cached.canvas, -half, -half, cached.size, cached.size);
+        c.drawImage(cached.canvas, -half, -half);
         c.restore();
     }
 }
