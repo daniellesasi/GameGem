@@ -1713,7 +1713,7 @@ function update() {
         if (coveragePercent >= 100) {
             winPhase = 2;
             const gemName = (playingStage > 0 && playingStage <= NECKLACE_GEMS.length)
-                ? NECKLACE_GEMS[playingStage - 1].name : '';
+                ? gemForStage(playingStage).name : '';
             const nextStageNum = (playingStage >= 1 ? playingStage : currentStage) + 1;
             const stageUnlockMsg = (nextStageNum > currentStage && nextStageNum <= TOTAL_STAGES)
                 ? `<p>STAGE ${nextStageNum} UNLOCKED</p>` : '';
@@ -3689,7 +3689,8 @@ function _drawWinSparkle(ctx, x, y, size, color) {
 }
 
 function _drawWinGemPolygons(ctx, stageNum, cx, cy, targetSize, rotation) {
-    const gem = NECKLACE_GEMS[((stageNum - 1) + NECKLACE_GEMS.length) % NECKLACE_GEMS.length];
+    const wrapped = ((stageNum - 1) % NECKLACE_GEMS.length + NECKLACE_GEMS.length) % NECKLACE_GEMS.length;
+    const gem = gemForStage(wrapped + 1);
     if (!gem || !gem.polygons) return;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     gem.polygons.forEach(poly => {
@@ -4870,19 +4871,24 @@ const GEM_DARK_PINK = [
 
 // All 12 gems — clockwise from bottom, then left side going up
 const NECKLACE_GEMS = [
-    { name: 'Green Star',      polygons: GEM_GREEN_STAR },
-    { name: 'Blue Sapphire',   polygons: GEM_BLUE_SAPPHIRE },
-    { name: 'Peach Drop',      polygons: GEM_PEACH_DROP },
-    { name: 'Garnet Hex',      polygons: GEM_GARNET },
-    { name: 'Aquamarine',      polygons: GEM_AQUAMARINE },
-    { name: 'Amethyst',        polygons: GEM_AMETHYST },
-    { name: 'Blue Crystal',    polygons: GEM_BLUE_CRYSTAL },
-    { name: 'Blue Heart',      polygons: GEM_BLUE_HEART },
-    { name: 'Green Marquise',  polygons: GEM_GREEN_MARQUISE },
-    { name: 'Small Green',     polygons: GEM_SMALL_GREEN },
-    { name: 'Red Orange',      polygons: GEM_RED_ORANGE },
-    { name: 'Dark Pink',       polygons: GEM_DARK_PINK },
+    { name: 'Jade',         polygons: GEM_GREEN_STAR },
+    { name: 'Sapphire',     polygons: GEM_BLUE_SAPPHIRE },
+    { name: 'Citrine',      polygons: GEM_PEACH_DROP },
+    { name: 'Garnet',       polygons: GEM_GARNET },
+    { name: 'Topaz',        polygons: GEM_AQUAMARINE },
+    { name: 'Kunzite',      polygons: GEM_AMETHYST },
+    { name: 'Moonstone',    polygons: GEM_BLUE_CRYSTAL },
+    { name: "Tiger's Eye",  polygons: GEM_BLUE_HEART },
+    { name: 'Emerald',      polygons: GEM_GREEN_MARQUISE },
+    { name: 'Golden Gem',   polygons: GEM_SMALL_GREEN },
+    { name: 'Amber',        polygons: GEM_RED_ORANGE },
+    { name: 'Ruby',         polygons: GEM_DARK_PINK },
 ];
+
+// Stage N (1-indexed) displays NECKLACE_GEMS[STAGE_TO_GEM[N-1]] on the necklace.
+// Decouples difficulty order (STAGE_CONFIG) from visual placement on the chain.
+const STAGE_TO_GEM = [8, 7, 6, 5, 4, 3, 2, 1, 0, 11, 10, 9];
+const gemForStage = (stageNum) => NECKLACE_GEMS[STAGE_TO_GEM[stageNum - 1]];
 
 // Pearl bead positions from actual SVG artwork (center coordinates)
 const PEARL_POSITIONS = [];
@@ -4949,10 +4955,8 @@ function renderNecklaceMap() {
     // Draw gems — render highest stage first (lowest z-order) so lower stage numbers
     // sit on top and their click areas are never blocked by a higher stage's polygons.
     let arrowSvg = ''; // collected separately so arrows always render above all gems
-    const gemOrder = NECKLACE_GEMS.map((gem, i) => i).reverse(); // 11→10→…→0
-    gemOrder.forEach(i => {
-        const gem = NECKLACE_GEMS[i];
-        const stageNum = i + 1;
+    for (let stageNum = NECKLACE_GEMS.length; stageNum >= 1; stageNum--) {
+        const gem = gemForStage(stageNum);
         const completed = stageNum < currentStage;
         const isCurrent = stageNum === currentStage;
         const unlocked = stageNum <= currentStage;
@@ -5006,7 +5010,7 @@ function renderNecklaceMap() {
             arrowSvg += `<animateTransform attributeName="transform" type="translate" values="0,0;0,-5;0,0" dur="1s" repeatCount="indefinite"/>`;
             arrowSvg += `</polygon>`;
         }
-    });
+    }
 
     svg += arrowSvg; // arrows always on top
 
@@ -5041,7 +5045,7 @@ function _updateStageLabel() {
     const el = document.getElementById('stage-label');
     if (!el) return;
     const stageN = playingStage >= 1 ? playingStage : currentStage;
-    const gemName = (stageN >= 1 && stageN <= NECKLACE_GEMS.length) ? NECKLACE_GEMS[stageN - 1].name : '';
+    const gemName = (stageN >= 1 && stageN <= NECKLACE_GEMS.length) ? gemForStage(stageN).name : '';
     el.textContent = gemName ? `Stage ${stageN}  ·  ${gemName}` : `Stage ${stageN}`;
 }
 

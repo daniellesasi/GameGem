@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gem Order Tool</title>
+<style>
+    body { background: #1a1a1f; color: #eee; font-family: 'Helvetica', sans-serif; margin: 0; padding: 24px; }
+    h1 { font-size: 22px; letter-spacing: 2px; margin: 0 0 8px; }
+    .hint { color: #aaa; font-size: 13px; margin-bottom: 24px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1100px; }
+    .card { background: #232328; border: 1px solid #333; border-radius: 14px; padding: 12px; display: flex; flex-direction: column; align-items: center; position: relative; }
+    .card.assigned { border-color: #6cd76a; box-shadow: 0 0 0 1px #6cd76a inset; }
+    .stage-tag { position: absolute; top: 8px; left: 8px; background: #6cd76a; color: #111; font-weight: 700; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+    .stage-tag.empty { background: #333; color: #888; }
+    .gem-svg { width: 140px; height: 140px; margin: 8px 0; }
+    .name { font-size: 11px; letter-spacing: 1px; margin-bottom: 6px; text-align: center; color: #888; }
+    .rename { width: 100%; box-sizing: border-box; background: #111; color: #eee; border: 1px solid #444; padding: 6px 8px; border-radius: 6px; font-size: 13px; margin-bottom: 6px; text-align: center; }
+    .rename:focus { border-color: #6cd76a; outline: none; }
+    select { background: #111; color: #eee; border: 1px solid #444; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .summary { margin-top: 32px; background: #232328; border: 1px solid #333; border-radius: 14px; padding: 16px; max-width: 1100px; }
+    .summary h2 { font-size: 15px; margin: 0 0 12px; letter-spacing: 1px; }
+    .order-list { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 13px; }
+    .order-list div { padding: 6px 8px; background: #111; border-radius: 4px; }
+    .empty-row { color: #666; }
+    pre { background: #0a0a0a; border: 1px solid #333; padding: 12px; border-radius: 6px; font-size: 12px; overflow: auto; margin-top: 12px; }
+    button { background: #6cd76a; color: #111; border: none; padding: 10px 18px; font-weight: 700; border-radius: 6px; cursor: pointer; margin-right: 8px; }
+    button.secondary { background: #444; color: #eee; }
+</style>
+</head>
+<body>
+<h1>GEM ORDER TOOL</h1>
+<p class="hint">Pick a stage number for each gem. Stage 1 = easiest, Stage 12 = hardest. Order doesn't have to be filled in any particular sequence.</p>
+
+<div class="grid" id="grid"></div>
+
+<div class="summary">
+    <h2>Mapping (Stage → Gem)</h2>
+    <div class="order-list" id="orderList"></div>
+    <pre id="output">// Fill in stage numbers above to generate the mapping</pre>
+    <button onclick="copyOutput()">Copy mapping</button>
+    <button class="secondary" onclick="resetAll()">Reset</button>
+</div>
+
+<script>
+const B3X = 189.66, B3Y = 933.19;
+function b3(pts) {
+    return pts.split(' ').map(p => {
+        const [x, y] = p.split(',').map(Number);
+        return `${(x + B3X).toFixed(2)},${(y + B3Y).toFixed(2)}`;
+    }).join(' ');
+}
+
+const GEM_AMETHYST = [
+    {pts:"1065.13,1281.58 1040.18,1473.06 1034.82,1448.94 1041.13,1372.52", fill:"#f3cafa"},
+    {pts:"1040.18,1473.06 964.82,1463.01 957.33,1456.32 917.79,1350.62 990.49,1385.24 1004.79,1425.56 1034.82,1448.94", fill:"#ec9bf6"},
+    {pts:"1041.13,1372.52 1034.82,1448.94 1004.79,1425.56 990.49,1385.24 1012.88,1354.02", fill:"#f37bee"},
+    {pts:"1065.13,1281.58 1041.13,1372.52 1012.88,1354.02 996.91,1280.56 1004.24,1248.16 1033.72,1223.61 1044.03,1229.88", fill:"#fcf3fe"},
+    {pts:"1012.88,1354.02 990.49,1385.24 917.79,1350.62 934.15,1305.52 996.91,1280.56", fill:"#f3cafa"},
+    {pts:"1004.24,1248.16 996.91,1280.56 934.15,1305.52 988.2,1232.05", fill:"#fefaff"},
+    {pts:"1033.72,1223.61 1004.24,1248.16 988.2,1232.05 1025.83,1218.8", fill:"#fcf3fe"},
+];
+const GEM_BLUE_CRYSTAL = [
+    {pts:"1108.26,1265.77 1179.36,1320.13 1166.76,1343.46 1024.42,1235.69", fill:"#eee8d2"},
+    {pts:"1179.36,1320.13 1201.42,1351.88 1198.89,1367.55", fill:"#f5f5e8"},
+    {pts:"1179.36,1320.13 1198.89,1367.55 1166.76,1343.46", fill:"#ccd690"},
+    {pts:"1201.42,1351.88 1216.13,1373.06 1223.73,1429.78", fill:"#8b8940"},
+    {pts:"1201.42,1351.88 1223.73,1429.78 1211.95,1410.13 1196.25,1383.94 1198.89,1367.55", fill:"#ccd690"},
+    {pts:"1166.76,1343.46 1198.89,1367.55 1196.25,1383.94", fill:"#f5f5e8"},
+    {pts:"1024.42,1235.69 1166.76,1343.46 1157.27,1361 1141.94,1375.64", fill:"#e5e3b7"},
+    {pts:"1166.76,1343.46 1196.25,1383.94 1141.94,1375.64 1157.27,1361", fill:"#eee8d2"},
+    {pts:"1196.25,1383.94 1211.95,1410.13 1174.6,1410.26", fill:"#eee8d2"},
+    {pts:"1196.25,1383.94 1174.6,1410.26 1141.94,1375.64", fill:"#e5e3b7"},
+    {pts:"1211.95,1410.13 1223.73,1429.78 1209.91,1442.08", fill:"#8b8940"},
+    {pts:"1211.95,1410.13 1209.91,1442.08 1174.6,1410.26", fill:"#e5e3b7"},
+    {pts:"1174.6,1410.26 1209.91,1442.08 1190.15,1446.97", fill:"#8b8940"},
+    {pts:"1141.94,1375.64 1174.6,1410.26 1144.5,1415.16", fill:"#f5f5e8"},
+    {pts:"1174.6,1410.26 1190.15,1446.97 1161.3,1454.1", fill:"#e5e3b7"},
+    {pts:"1174.6,1410.26 1161.3,1454.1 1144.51,1415.34 1144.5,1415.16", fill:"#ccd690"},
+    {pts:"1024.42,1235.69 1141.94,1375.64 1091.13,1396.04", fill:"#f5f5e8"},
+    {pts:"1141.94,1375.64 1144.5,1415.16 1144.16,1415.21 1091.13,1396.04", fill:"#e5e3b7"},
+    {pts:"1144.16,1415.21 1144.51,1415.34 1161.3,1454.1 1122.34,1418.76", fill:"#f5f5e8"},
+    {pts:"1091.13,1396.04 1144.16,1415.21 1122.34,1418.76 1119.69,1416.36", fill:"#ccd690"},
+];
+const GEM_AQUAMARINE = [
+    {pts:"1056.9,1453.52 1014.89,1569.19 964.74,1555.53", fill:"#a9e2ff"},
+    {pts:"1014.89,1569.19 865.42,1660.77 892.63,1619.09", fill:"#73b6e5"},
+    {pts:"1014.89,1569.19 892.63,1619.09 855.77,1623.4 882.79,1605.21", fill:"#48b9ff"},
+    {pts:"1014.89,1569.19 882.79,1605.21 879.9,1606 849.03,1610.64 870.45,1583.59 964.74,1555.53", fill:"#73b6e5"},
+    {pts:"892.63,1619.09 865.42,1660.77 818.54,1648.44 855.77,1623.4", fill:"#5ea4dd"},
+    {pts:"865.42,1660.77 778.68,1669.18 818.54,1648.44", fill:"#3d87d1"},
+    {pts:"1056.9,1453.52 964.74,1555.53 870.45,1583.59 943.3,1492.14", fill:"#7bcdff"},
+    {pts:"849.03,1610.64 879.9,1606 882.79,1605.21 855.77,1623.4 818.54,1648.44 785.5,1642.92 791.66,1619.25", fill:"#3d87d1"},
+    {pts:"818.54,1648.44 778.68,1669.18 785.5,1642.92", fill:"#5ea4dd"},
+    {pts:"870.45,1583.59 849.03,1610.64 791.66,1619.25 943.3,1492.14", fill:"#48b9ff"},
+];
+const GEM_GARNET = [
+    {pts:"774.28,1599.51 819.19,1701.73 773.87,1695.29 744.3,1621.38", fill:"#572e42"},
+    {pts:"819.19,1701.73 734.61,1781.06 727.32,1731.42 773.87,1695.29", fill:"#3d1524"},
+    {pts:"774.28,1599.51 744.3,1621.38 670.66,1613.99 671.04,1573.16", fill:"#723449"},
+    {pts:"744.3,1621.38 773.87,1695.29 727.32,1731.42 670.66,1613.99", fill:"#eae1e3"},
+    {pts:"727.32,1731.42 734.61,1781.06 638.01,1765.8 666.56,1731.42", fill:"#572e42"},
+    {pts:"670.66,1613.99 727.32,1731.42 666.56,1731.42 628.79,1675.79", fill:"#cbb0b8"},
+    {pts:"671.04,1573.16 670.66,1613.99 628.79,1675.79 599.59,1670.21", fill:"#572e42"},
+    {pts:"628.79,1675.79 666.56,1731.42 638.01,1765.8 599.59,1670.21", fill:"#723449"},
+];
+const GEM_BLUE_HEART = [
+    {pts:"1151.71,1099.02 1184.7,1125.52 1138.48,1121.52", fill:"#7f7250"},
+    {pts:"1138.48,1121.52 1184.7,1125.52 1166.79,1154.82", fill:"#ad9f7b"},
+    {pts:"1184.7,1125.52 1199.44,1169.54 1166.79,1154.82", fill:"#c8bfa0"},
+    {pts:"1151.71,1099.02 1138.48,1121.52 1113.89,1102.13", fill:"#ad9f7b"},
+    {pts:"1166.79,1154.82 1199.44,1169.54 1196.57,1209.19 1169.66,1203.82", fill:"#ad9f7b"},
+    {pts:"1113.89,1102.13 1138.48,1121.52 1111.44,1148.55 1098.35,1116.07", fill:"#7f7250"},
+    {pts:"1138.48,1121.52 1166.79,1154.82 1169.66,1203.82 1159.29,1227.02 1113.68,1233.02 1091.7,1221.85 1089.37,1220.53 1071.75,1210.52 1074.11,1188.89 1075.96,1187.97 1104.53,1173.9 1111.44,1148.55", fill:"#c8bfa0"},
+    {pts:"1196.57,1209.19 1196.3,1212.97 1186.46,1254.27 1159.29,1227.02 1169.66,1203.82", fill:"#7f7250"},
+    {pts:"1098.35,1116.07 1111.44,1148.55 1090.05,1151.74", fill:"#4e4732"},
+    {pts:"1111.44,1148.55 1104.53,1173.9 1090.05,1151.74", fill:"#c8bfa0"},
+    {pts:"1159.29,1227.02 1186.46,1254.27 1143.02,1262.22", fill:"#4e4732"},
+    {pts:"1159.29,1227.02 1143.02,1262.22 1113.68,1233.02", fill:"#ad9f7b"},
+    {pts:"1090.05,1151.74 1104.53,1173.9 1075.96,1187.97", fill:"#ad9f7b"},
+    {pts:"1090.05,1151.74 1075.96,1187.97 1074.11,1188.89 1054.36,1155.52", fill:"#7f7250"},
+    {pts:"1054.36,1155.52 1074.11,1188.89 1071.75,1210.52 1031.02,1192.48", fill:"#ad9f7b"},
+    {pts:"1113.68,1233.02 1143.02,1262.22 1085.24,1257.35", fill:"#7f7250"},
+    {pts:"1091.7,1221.85 1113.68,1233.02 1085.24,1257.35 1089.37,1220.53", fill:"#c8bfa0"},
+    {pts:"1071.75,1210.52 1089.37,1220.53 1045,1236.05", fill:"#ad9f7b"},
+    {pts:"1089.37,1220.53 1085.24,1257.35 1045,1236.05", fill:"#4e4732"},
+    {pts:"1031.02,1192.48 1071.75,1210.52 1045,1236.05", fill:"#7f7250"},
+];
+const GEM_GREEN_MARQUISE = [
+    {pts:"1241.64,1056.62 1227.42,1078.62 1220.03,1061.49 1225,1044.74", fill:"#4b9e2d"},
+    {pts:"1227.42,1078.62 1204.07,1105.94 1208.81,1077.2", fill:"#a2ed64"},
+    {pts:"1227.42,1078.62 1208.81,1077.2 1220.03,1061.49", fill:"#5dc242"},
+    {pts:"1243.39,1030.7 1241.64,1056.62 1232.32,1034.02", fill:"#5dc242"},
+    {pts:"1241.64,1056.62 1225,1044.74 1232.32,1034.02", fill:"#a2ed64"},
+    {pts:"1208.81,1077.2 1204.07,1105.94 1189.98,1089.85 1207.99,1078.35", fill:"#4b9e2d"},
+    {pts:"1204.07,1105.94 1182.64,1110.28 1189.98,1089.85", fill:"#a2ed64"},
+    {pts:"1243.39,1030.7 1232.32,1034.02 1231.71,1003.6", fill:"#a2ed64"},
+    {pts:"1208.81,1077.2 1207.99,1078.35 1189.98,1089.85 1173.07,1091.23 1169.77,1073.09 1175.28,1055.04 1190.8,1036.67 1203.49,1030.7 1220.67,1028.04 1225,1044.74 1220.03,1061.49", fill:"#c1f78f"},
+    {pts:"1189.98,1089.85 1182.64,1110.28 1173.07,1091.23", fill:"#4b9e2d"},
+    {pts:"1182.64,1110.28 1159.82,1108.42 1173.07,1091.23", fill:"#5dc242"},
+    {pts:"1232.32,1034.02 1225,1044.74 1220.67,1028.04", fill:"#5dc242"},
+    {pts:"1231.71,1003.6 1232.32,1034.02 1220.67,1028.04", fill:"#c1f78f"},
+    {pts:"1231.71,1003.6 1220.67,1028.04 1203.49,1030.7 1228.7,1003.41", fill:"#5dc242"},
+    {pts:"1169.77,1073.09 1173.07,1091.23 1157.9,1087.05", fill:"#a2ed64"},
+    {pts:"1173.07,1091.23 1159.82,1108.42 1157.9,1087.05", fill:"#4b9e2d"},
+    {pts:"1157.9,1087.05 1159.82,1108.42 1147.28,1088.04 1151.79,1063.08", fill:"#5dc242"},
+    {pts:"1228.7,1003.41 1203.49,1030.7 1208.16,1002.09", fill:"#c1f78f"},
+    {pts:"1208.16,1002.09 1203.49,1030.7 1190.8,1036.67 1207.45,1002.64", fill:"#5dc242"},
+    {pts:"1175.28,1055.04 1169.77,1073.09 1151.79,1063.08", fill:"#a2ed64"},
+    {pts:"1169.77,1073.09 1157.9,1087.05 1151.79,1063.08", fill:"#4b9e2d"},
+    {pts:"1151.79,1063.08 1166.78,1038.65 1175.28,1055.04", fill:"#5dc242"},
+    {pts:"1175.28,1055.04 1166.78,1038.65 1190.8,1036.67", fill:"#4b9e2d"},
+    {pts:"1190.8,1036.67 1166.78,1038.65 1185.74,1019.68 1207.45,1002.64", fill:"#a2ed64"},
+];
+const GEM_GREEN_STAR = [
+    {pts:b3("330.05,905.81 309.13,900.15 264.15,803.75 262.02,766.22 300.57,741.78"), fill:"#80d6a8"},
+    {pts:b3("309.13,900.15 214.56,874.59 217.4,833.37 264.15,803.75"), fill:"#54c495"},
+    {pts:b3("160.82,908.65 125.22,931.21 129.05,849.04"), fill:"#abe4bc"},
+    {pts:b3("214.56,874.59 160.82,908.65 129.05,849.04 163.63,797.38 217.4,833.37"), fill:"#80d6a8"},
+    {pts:b3("156.7,739.59 183.91,710.63 259.23,717.34 262.02,766.22 264.15,803.75 217.4,833.37 163.63,797.38 126.03,772.22"), fill:"#abe4bc"},
+    {pts:b3("300.57,741.78 262.02,766.22 259.23,717.34 300.43,620.06 331.91,669.72"), fill:"#54c495"},
+    {pts:b3("163.63,797.38 129.05,849.04 9.42,794.35 126.03,772.22"), fill:"#54c495"},
+    {pts:b3("300.43,620.06 259.23,717.34 183.91,710.63 126.87,656.2 104.9,635.22 222.49,649.16"), fill:"#80d6a8"},
+    {pts:b3("156.7,739.59 126.03,772.22 .29,765.33 117.9,719.8"), fill:"#80d6a8"},
+    {pts:b3("126.03,772.22 9.42,794.35 .29,765.33"), fill:"#abe4bc"},
+    {pts:b3("183.91,710.63 156.7,739.59 117.9,719.8 100.15,664.34 126.87,656.2"), fill:"#54c495"},
+    {pts:b3("126.87,656.2 100.15,664.34 104.9,635.22"), fill:"#abe4bc"},
+];
+const GEM_BLUE_SAPPHIRE = [
+    {pts:b3("426.11,589.49 461.66,657.77 398.2,662.81 391.3,640.23"), fill:"#7aa1f6"},
+    {pts:b3("461.66,657.77 398.2,751.16 381.64,701.07 398.2,662.81"), fill:"#2b4ec6"},
+    {pts:b3("426.11,589.49 391.3,640.23 360.05,630.99 350.07,564.39"), fill:"#a5cbf9"},
+    {pts:b3("391.3,640.23 398.2,662.81 381.64,701.07 345.99,694.18 336.22,649.47 360.05,630.99"), fill:"#c8e8fa"},
+    {pts:b3("381.64,701.07 398.2,751.16 289.91,728.63 345.99,694.18"), fill:"#7aa1f6"},
+    {pts:b3("350.07,564.39 360.05,630.99 336.22,649.47 284.87,630.99"), fill:"#7aa1f6"},
+    {pts:b3("336.22,649.47 345.99,694.18 289.91,728.63 284.87,630.99"), fill:"#a5cbf9"},
+];
+const GEM_PEACH_DROP = [
+    {pts:b3("447.81,833.41 457.23,921.94 420.63,922.86 400.66,746.16"), fill:"#f0ceaa"},
+    {pts:b3("457.23,921.94 444.38,956.91 425.39,962.63"), fill:"#f8e2d7"},
+    {pts:b3("457.23,921.94 425.39,962.63 420.63,922.86"), fill:"#eac189"},
+    {pts:b3("444.38,956.91 435.81,980.23 382.87,1015.35"), fill:"#dcab52"},
+    {pts:b3("444.38,956.91 382.87,1015.35 392.59,995.32 405.54,968.62 425.39,962.63"), fill:"#eac189"},
+    {pts:b3("420.63,922.86 425.39,962.63 405.54,968.62"), fill:"#f4a286"},
+    {pts:b3("400.66,746.16 420.63,922.86 393.11,923.54 363.15,917.74"), fill:"#f8e2d7"},
+    {pts:b3("420.63,922.86 405.54,968.62 363.15,917.74 393.11,923.54"), fill:"#f0ceaa"},
+    {pts:b3("405.54,968.62 392.59,995.32 357.25,963.26"), fill:"#f0ceaa"},
+    {pts:b3("405.54,968.62 357.25,963.26 363.15,917.74"), fill:"#f8e2d7"},
+    {pts:b3("392.59,995.32 382.87,1015.35 356.81,1009.66"), fill:"#dcab52"},
+    {pts:b3("392.59,995.32 356.81,1009.66 357.25,963.26"), fill:"#f8e2d7"},
+    {pts:b3("357.25,963.26 356.81,1009.66 333,995.13"), fill:"#dcab52"},
+    {pts:b3("363.15,917.74 357.25,963.26 323.68,939.85"), fill:"#f4a286"},
+    {pts:b3("357.25,963.26 333,995.13 298.25,973.92"), fill:"#f8e2d7"},
+    {pts:b3("357.25,963.26 298.25,973.92 323.51,939.95 323.68,939.85"), fill:"#eac189"},
+    {pts:b3("400.66,746.16 363.15,917.74 293.64,884.32"), fill:"#f4a286"},
+    {pts:b3("363.15,917.74 323.68,939.85 323.31,939.59 293.64,884.32"), fill:"#f8e2d7"},
+    {pts:b3("323.31,939.59 323.51,939.95 298.25,973.92 298.98,922.62"), fill:"#f4a286"},
+    {pts:b3("293.64,884.32 323.31,939.59 298.98,922.62 299.03,919.13"), fill:"#eac189"},
+];
+const GEM_SMALL_GREEN = [
+    {pts:b3("423.55,13.78 398.86,92.77 381.96,89.84 403.02,31.55"), fill:"#8b7a2b"},
+    {pts:b3("423.55,13.78 403.02,31.55 342.95,21.96 319.3,18.19 310.86,.25"), fill:"#d7c97c"},
+    {pts:b3("398.86,92.77 322.2,141.59 315.25,123.25 381.96,89.84"), fill:"#c3b051"},
+    {pts:b3("403.02,31.55 381.96,89.84 315.25,123.25 280.76,122.77 280.76,122.2 342.9,22.28 342.95,21.96"), fill:"#eddf95"},
+    {pts:b3("342.95,21.96 342.9,22.28 280.76,122.2 280.76,122.77 257,122.43 249.51,72.4 319.3,18.19"), fill:"#d7c97c"},
+    {pts:b3("315.25,123.25 322.2,141.59 232.2,133.41 257,122.43 280.76,122.77"), fill:"#8b7a2b"},
+    {pts:b3("310.86,.25 319.3,18.19 249.51,72.4 237.28,70.28"), fill:"#c3b051"},
+    {pts:b3("249.51,72.4 257,122.43 232.2,133.41 237.28,70.28"), fill:"#5c5018"},
+];
+const GEM_RED_ORANGE = [
+    {pts:b3("282.46,143.89 325.1,225.76 248.99,231.8 240.72,204.73"), fill:"#dd5b36"},
+    {pts:b3("325.1,225.76 248.99,337.75 229.14,277.69 248.99,231.8"), fill:"#f93406"},
+    {pts:b3("282.46,143.89 240.72,204.73 203.25,193.65 191.28,113.78"), fill:"#f0a08f"},
+    {pts:b3("240.72,204.73 248.99,231.8 229.14,277.69 186.39,269.43 174.68,215.81 203.25,193.65"), fill:"#ffd3c2"},
+    {pts:b3("229.14,277.69 248.99,337.75 119.15,310.73 186.39,269.43"), fill:"#dd5b36"},
+    {pts:b3("191.28,113.78 203.25,193.65 174.68,215.81 113.1,193.65"), fill:"#dd5b36"},
+    {pts:b3("174.68,215.81 186.39,269.43 119.15,310.73 113.1,193.65"), fill:"#f0a08f"},
+];
+const GEM_DARK_PINK = [
+    {pts:b3("325.63,432.7 328.67,449.4 332.43,533.98 332.08,534 283.62,463.72"), fill:"#b46874"},
+    {pts:b3("314.21,370.03 325.63,432.7 275.81,420.87"), fill:"#b46874"},
+    {pts:b3("283.39,337.55 314.21,370.03 228.51,385.64"), fill:"#6c2222"},
+    {pts:b3("314.21,370.03 275.81,420.87 228.51,385.64"), fill:"#952e2d"},
+    {pts:b3("325.63,432.7 283.62,463.72 275.81,420.87"), fill:"#6c2222"},
+    {pts:b3("332.43,533.98 332.77,541.56 328.73,555.31 326.82,554.75 293.92,520.27 332.08,534"), fill:"#f9deea"},
+    {pts:b3("283.62,463.72 332.08,534 293.92,520.27"), fill:"#952e2d"},
+    {pts:b3("328.73,555.31 322.47,576.67 260.43,630.87 272.97,564.1 326.82,554.75"), fill:"#952e2d"},
+    {pts:b3("293.92,520.27 326.82,554.75 272.97,564.1"), fill:"#6c2222"},
+    {pts:b3("283.39,337.55 228.51,385.64 205.68,330.27"), fill:"#b46874"},
+    {pts:b3("283.62,463.72 293.92,520.27 272.97,564.1 235.54,529.45 215.99,445.81 228.51,385.64 275.81,420.87"), fill:"#f9deea"},
+    {pts:b3("235.54,529.45 272.97,564.1 260.43,630.87 229.09,569.81"), fill:"#b46874"},
+    {pts:b3("205.68,330.27 228.51,385.64 208.74,378.93 170.37,365.89"), fill:"#952e2d"},
+    {pts:b3("228.51,385.64 215.99,445.81 174.57,422.03 181.7,399.62 208.74,378.93"), fill:"#b46874"},
+    {pts:b3("229.09,569.81 260.43,630.87 208.55,584.96 176.49,536.81"), fill:"#952e2d"},
+    {pts:b3("170.37,365.89 208.74,378.93 181.7,399.62"), fill:"#f9deea"},
+    {pts:b3("215.99,445.81 235.54,529.45 164.99,473.66"), fill:"#b46874"},
+    {pts:b3("164.99,473.66 235.54,529.45 176.49,536.81"), fill:"#952e2d"},
+    {pts:b3("235.54,529.45 229.09,569.81 176.49,536.81"), fill:"#6c2222"},
+    {pts:b3("215.99,445.81 164.99,473.66 159.15,413.17 174.57,422.03"), fill:"#6c2222"},
+    {pts:b3("170.37,365.89 181.7,399.62 159.15,413.17"), fill:"#952e2d"},
+    {pts:b3("181.7,399.62 174.57,422.03 159.15,413.17"), fill:"#952e2d"},
+];
+
+const GEMS = [
+    { name: 'Green Star',     polygons: GEM_GREEN_STAR },
+    { name: 'Blue Sapphire',  polygons: GEM_BLUE_SAPPHIRE },
+    { name: 'Peach Drop',     polygons: GEM_PEACH_DROP },
+    { name: 'Garnet Hex',     polygons: GEM_GARNET },
+    { name: 'Aquamarine',     polygons: GEM_AQUAMARINE },
+    { name: 'Amethyst',       polygons: GEM_AMETHYST },
+    { name: 'Blue Crystal',   polygons: GEM_BLUE_CRYSTAL },
+    { name: 'Blue Heart',     polygons: GEM_BLUE_HEART },
+    { name: 'Green Marquise', polygons: GEM_GREEN_MARQUISE },
+    { name: 'Small Green',    polygons: GEM_SMALL_GREEN },
+    { name: 'Red Orange',     polygons: GEM_RED_ORANGE },
+    { name: 'Dark Pink',      polygons: GEM_DARK_PINK },
+];
+
+function getBounds(polygons) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    polygons.forEach(poly => {
+        poly.pts.split(' ').forEach(p => {
+            const [x, y] = p.split(',').map(Number);
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        });
+    });
+    return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
+function makeGemSvg(polygons) {
+    const b = getBounds(polygons);
+    const pad = Math.max(b.w, b.h) * 0.05;
+    const vw = b.w + pad * 2;
+    const vh = b.h + pad * 2;
+    let svg = `<svg class="gem-svg" viewBox="${b.minX - pad} ${b.minY - pad} ${vw} ${vh}">`;
+    polygons.forEach(poly => {
+        svg += `<polygon points="${poly.pts}" fill="${poly.fill}"/>`;
+    });
+    svg += `</svg>`;
+    return svg;
+}
+
+const assignments = new Array(GEMS.length).fill(0); // 0 = unassigned, 1-12 = stage
+const renames = GEMS.map(g => g.name); // editable display names, default = original
+
+function render() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    GEMS.forEach((gem, gIdx) => {
+        const stage = assignments[gIdx];
+        const card = document.createElement('div');
+        card.className = 'card' + (stage > 0 ? ' assigned' : '');
+        const tagClass = stage > 0 ? 'stage-tag' : 'stage-tag empty';
+        const tagText = stage > 0 ? stage : '–';
+        card.innerHTML = `
+            <div class="${tagClass}">${tagText}</div>
+            ${makeGemSvg(gem.polygons)}
+            <div class="name">orig: ${gem.name}</div>
+            <input class="rename" type="text" data-gem="${gIdx}" value="${renames[gIdx].replace(/"/g, '&quot;')}" placeholder="Rename this gem"/>
+            <select data-gem="${gIdx}">
+                <option value="0">— pick stage —</option>
+                ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n => `<option value="${n}" ${stage === n ? 'selected' : ''}>Stage ${n}</option>`).join('')}
+            </select>
+        `;
+        grid.appendChild(card);
+    });
+    grid.querySelectorAll('select').forEach(sel => {
+        sel.addEventListener('change', e => {
+            const gIdx = parseInt(e.target.dataset.gem);
+            const newStage = parseInt(e.target.value);
+            if (newStage > 0) {
+                for (let i = 0; i < assignments.length; i++) {
+                    if (i !== gIdx && assignments[i] === newStage) assignments[i] = 0;
+                }
+            }
+            assignments[gIdx] = newStage;
+            render();
+            renderSummary();
+        });
+    });
+    grid.querySelectorAll('.rename').forEach(inp => {
+        inp.addEventListener('input', e => {
+            const gIdx = parseInt(e.target.dataset.gem);
+            renames[gIdx] = e.target.value;
+            renderSummary();
+        });
+    });
+    renderSummary();
+}
+
+function renderSummary() {
+    const list = document.getElementById('orderList');
+    list.innerHTML = '';
+    for (let stage = 1; stage <= 12; stage++) {
+        const gIdx = assignments.indexOf(stage);
+        const div = document.createElement('div');
+        if (gIdx >= 0) {
+            div.textContent = `${stage}. ${renames[gIdx]}`;
+        } else {
+            div.textContent = `${stage}. (empty)`;
+            div.className = 'empty-row';
+        }
+        list.appendChild(div);
+    }
+    const out = document.getElementById('output');
+    const renamedAny = renames.some((n, i) => n !== GEMS[i].name);
+    let renamesBlock = '';
+    if (renamedAny) {
+        renamesBlock = '\n\nconst GEM_NAMES = [\n' +
+            renames.map(n => `    ${JSON.stringify(n)}`).join(',\n') + '\n];';
+    }
+    if (assignments.every(a => a > 0)) {
+        const map = new Array(12);
+        for (let stage = 1; stage <= 12; stage++) map[stage - 1] = assignments.indexOf(stage);
+        out.textContent =
+            'const STAGE_TO_GEM = [' + map.join(', ') + '];\n' +
+            '// stage N (1-indexed) displays NECKLACE_GEMS[STAGE_TO_GEM[N-1]]' +
+            renamesBlock;
+    } else {
+        const filled = assignments.filter(a => a > 0).length;
+        out.textContent = `// ${filled}/12 assigned — fill all 12 to generate the mapping` + renamesBlock;
+    }
+}
+
+function copyOutput() {
+    const text = document.getElementById('output').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+        alert('Copied!');
+    });
+}
+
+function resetAll() {
+    for (let i = 0; i < assignments.length; i++) assignments[i] = 0;
+    render();
+}
+
+render();
+</script>
+</body>
+</html>
