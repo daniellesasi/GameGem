@@ -2561,20 +2561,34 @@ function drawBlob(ctx, x, y, radius, wobblePhase, complexity = 5, irregularity =
 // ─────────────────────────────────────────────
 function draw() {
     // Pearl mode: 1s real-time fade from black to near-white. As the effect
-    // ends (last ~1s) the bg flickers between white and black — a dying
-    // fluorescent feel that hints the screen is about to go dark.
+    // ends (last ~1.5s) the bg blinks between white and black — a couple of
+    // dramatic flickers like a dying fluorescent — before settling to dark.
     if (huntedTime > 0) {
         const elapsedSec = (performance.now() - _pearlBgFadeStart) / 1000;
         const fadeIn = Math.min(1, elapsedSec);
         let fadeOut;
-        if (huntedTime > 60) {
-            fadeOut = 1;
+        if (huntedTime > 90) {
+            fadeOut = 1; // solid white
         } else {
-            // Binary flicker — probability of "white" drops as huntedTime → 0
-            const t = huntedTime / 60; // 1 → 0
-            const slot = Math.floor(performance.now() / 55); // ~18 changes/sec
-            const r = ((slot * 9301 + 49297) % 233280) / 233280;
-            fadeOut = r < t ? 1 : 0;
+            // Hardcoded blink timeline (huntedTime 90 → 0):
+            //   90-78  WHITE   (still solid)
+            //   78-72  off     (1st blink)
+            //   72-58  WHITE
+            //   58-50  off     (2nd blink)
+            //   50-38  WHITE
+            //   38-30  off     (3rd blink)
+            //   30-20  WHITE   (last desperate flash)
+            //   20-0   off     (dead)
+            let on;
+            if      (huntedTime > 78) on = true;
+            else if (huntedTime > 72) on = false;
+            else if (huntedTime > 58) on = true;
+            else if (huntedTime > 50) on = false;
+            else if (huntedTime > 38) on = true;
+            else if (huntedTime > 30) on = false;
+            else if (huntedTime > 20) on = true;
+            else                      on = false;
+            fadeOut = on ? 1 : 0;
         }
         const fade = Math.min(fadeIn, fadeOut);
         const v = Math.round(2 + fade * 248); // peak 250 — near white but keeps edge
@@ -3362,10 +3376,12 @@ function draw() {
 
         ctx.save();
 
-        // Rays of light from edges — fine, iridescent, soft-edged
+        // Rays of light from edges — fine, iridescent, soft-edged.
+        // Use 'source-over' (default) so rays remain visible on the white
+        // pearl backdrop — 'screen' blends to pure white on a white bg.
         const rayCount = IS_TOUCH ? 24 : 64;
         const baseHue = (t * 20) % 360;
-        ctx.globalCompositeOperation = 'screen';
+        ctx.globalCompositeOperation = 'source-over';
 
         for (let i = 0; i < rayCount; i++) {
             const angle = (i / rayCount) * Math.PI * 2;
@@ -3389,12 +3405,14 @@ function draw() {
             // Iridescent colors — cycle through pink, cyan, gold, violet, green
             const hue = (baseHue + i * (360 / rayCount) + Math.sin(t * 1.2 + i) * 30) % 360;
 
-            // Draw ray as a thin line with gradient stroke — no hard edges
+            // Draw ray as a thin line with gradient stroke — no hard edges.
+            // Saturated mid-lightness colors so they read on both black and
+            // white backgrounds without 'screen' blend tricks.
             const grad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
-            grad.addColorStop(0, `hsla(${hue}, 80%, 80%, ${fade * 1.0 * pulse})`);
-            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360}, 90%, 75%, ${fade * 0.7 * pulse})`);
-            grad.addColorStop(0.5, `hsla(${(hue + 80) % 360}, 85%, 70%, ${fade * 0.3 * pulse})`);
-            grad.addColorStop(1, `hsla(${(hue + 120) % 360}, 80%, 65%, 0)`);
+            grad.addColorStop(0,    `hsla(${hue},                90%, 55%, ${fade * 0.85 * pulse})`);
+            grad.addColorStop(0.15, `hsla(${(hue + 40) % 360},   95%, 50%, ${fade * 0.65 * pulse})`);
+            grad.addColorStop(0.5,  `hsla(${(hue + 80) % 360},   90%, 45%, ${fade * 0.3  * pulse})`);
+            grad.addColorStop(1,    `hsla(${(hue + 120) % 360},  85%, 45%, 0)`);
 
             // Fine line stroke instead of triangle — no visible hard edges
             ctx.beginPath();
@@ -3405,13 +3423,13 @@ function draw() {
             ctx.lineCap = 'round';
             ctx.stroke();
 
-            // Even finer bright core with white-ish iridescent tint
+            // Even finer bright core — saturated iridescent tint
             if (pulse > 0.5) {
                 const coreA = fade * 0.7 * (pulse - 0.5) * 2;
                 const coreGrad = ctx.createLinearGradient(edgeX, edgeY, innerX, innerY);
-                coreGrad.addColorStop(0, `hsla(${(hue + 20) % 360}, 50%, 95%, ${coreA})`);
-                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360}, 60%, 90%, ${coreA * 0.5})`);
-                coreGrad.addColorStop(1, 'rgba(255,255,255,0)');
+                coreGrad.addColorStop(0,   `hsla(${(hue + 20) % 360}, 100%, 60%, ${coreA})`);
+                coreGrad.addColorStop(0.4, `hsla(${(hue + 60) % 360},  95%, 55%, ${coreA * 0.5})`);
+                coreGrad.addColorStop(1,   `hsla(${(hue + 100) % 360}, 90%, 50%, 0)`);
                 ctx.beginPath();
                 ctx.moveTo(edgeX, edgeY);
                 ctx.lineTo(innerX, innerY);
