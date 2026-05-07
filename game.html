@@ -3337,6 +3337,26 @@ function draw() {
                 ctx.restore();
             } else {
                 draw3DItem(ctx, it, it.x, it.y, true);
+
+                // Animated specular highlight — fakes light catching on a
+                // faceted gem. The glint sweeps in a Lissajous loop and is
+                // masked to the gem's painted pixels via 'source-atop'.
+                const gT  = player.anim.time;
+                const gemR = it.w * 0.42;
+                const sx = Math.cos(gT * 1.4 + it.rot * 0.3) * gemR * 0.45;
+                const sy = Math.sin(gT * 1.1 + it.rot * 0.7) * gemR * 0.35 - gemR * 0.1;
+                ctx.save();
+                ctx.globalCompositeOperation = 'source-atop';
+                const glint = ctx.createRadialGradient(sx, sy, 0, sx, sy, gemR * 0.55);
+                const pulse = 0.30 + 0.20 * Math.sin(gT * 3.2 + (it.rotPhase || 0));
+                glint.addColorStop(0,   `rgba(255,255,255,${pulse})`);
+                glint.addColorStop(0.4, `rgba(255,255,255,${pulse * 0.35})`);
+                glint.addColorStop(1,   'rgba(255,255,255,0)');
+                ctx.fillStyle = glint;
+                ctx.beginPath();
+                ctx.arc(0, 0, gemR * 1.1, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
             }
             ctx.restore();
         });
