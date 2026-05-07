@@ -2206,6 +2206,21 @@ function _getItemCache(type, grayscale) {
         poly.vertices.forEach((v, i) => { if(i===0) oc.moveTo(v.x, v.y); else oc.lineTo(v.x, v.y); });
         oc.closePath(); oc.fill();
     });
+    // White highlight on the top facets — same trick the win-screen gem
+    // uses to fake specular shading. First 3 polygons get a translucent
+    // white overlay so the gem reads as faceted instead of flat.
+    if (!grayscale) {
+        oc.globalAlpha = 0.22;
+        oc.fillStyle = 'white';
+        const topFacets = Math.min(3, shape.polys.length);
+        for (let i = 0; i < topFacets; i++) {
+            const poly = shape.polys[i];
+            oc.beginPath();
+            poly.vertices.forEach((v, j) => { if(j===0) oc.moveTo(v.x, v.y); else oc.lineTo(v.x, v.y); });
+            oc.closePath(); oc.fill();
+        }
+        oc.globalAlpha = 1;
+    }
     // renderSize equivalent of the non-supersampled cache — preserves the
     // original drawScale math exactly, so display size is unchanged.
     _itemCache[key] = { canvas: off, size: baseSize, renderSize: canvasSize / sc };
