@@ -2164,8 +2164,11 @@ function _getItemCache(type, grayscale) {
         return '#' + l + l + l;
     };
 
+    // Supersample the cache so high-scale items don't pixelate. 3× gives a
+    // cache canvas with 9× the pixel area to scale from.
+    const SUPERSAMPLE = 3;
     const pad = 4;
-    const baseSize = shape.maxDim + pad * 2;
+    const baseSize = (shape.maxDim + pad * 2) * SUPERSAMPLE;
     const off = document.createElement('canvas');
     off.width = off.height = Math.ceil(baseSize);
     const oc = off.getContext('2d');
