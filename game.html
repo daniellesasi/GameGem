@@ -392,8 +392,14 @@
             flex: 1; display: flex; align-items: center; justify-content: center;
             position: relative; padding: 20px;
             overflow: hidden;
+            perspective: 900px;
         }
-        .necklace-map-container svg { width: 100%; max-width: 420px; height: auto; }
+        .necklace-map-container svg {
+            width: 100%; max-width: 420px; height: auto;
+            transform-style: preserve-3d;
+            will-change: transform;
+            transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        }
 
         .gem-node {
             cursor: pointer; transition: filter 0.2s, opacity 0.2s;
@@ -5288,6 +5294,74 @@ window.addEventListener('keydown', e => {
         saveMenuState(); updatePearlUI(); renderNecklaceMap();
     }
 });
+
+// ── Necklace parallax tilt — mouse on desktop, deviceorientation on mobile ──
+(function() {
+    const MAX_TILT = 14;        // max degrees on each axis
+    let targetX = 0, targetY = 0; // target tilt (deg)
+    let curX = 0, curY = 0;       // smoothed tilt (deg)
+    let _rafQueued = false;
+
+    function applyTilt() {
+        _rafQueued = false;
+        const container = document.getElementById('necklace-map');
+        if (!container) return;
+        const svg = container.querySelector('svg');
+        if (!svg) return;
+        // Smooth toward target — light spring
+        curX += (targetX - curX) * 0.12;
+        curY += (targetY - curY) * 0.12;
+        svg.style.transform = `rotateX(${curX.toFixed(2)}deg) rotateY(${curY.toFixed(2)}deg)`;
+        if (Math.abs(targetX - curX) > 0.05 || Math.abs(targetY - curY) > 0.05) {
+            _rafQueued = true;
+            requestAnimationFrame(applyTilt);
+        }
+    }
+    function queueTilt() {
+        if (!_rafQueued) { _rafQueued = true; requestAnimationFrame(applyTilt); }
+    }
+
+    // Desktop: tilt with mouse position
+    if (!IS_TOUCH) {
+        window.addEventListener('pointermove', e => {
+            const menu = document.getElementById('main-menu');
+            if (!menu || !menu.classList.contains('visible')) return;
+            // Map cursor x → rotateY (-MAX..MAX), cursor y → rotateX (MAX..-MAX inverted)
+            const nx = (e.clientX / window.innerWidth) * 2 - 1;   // -1..1
+            const ny = (e.clientY / window.innerHeight) * 2 - 1;  // -1..1
+            targetY = nx * MAX_TILT;
+            targetX = -ny * MAX_TILT;
+            queueTilt();
+        });
+        // Reset when leaving the window
+        window.addEventListener('pointerleave', () => { targetX = 0; targetY = 0; queueTilt(); });
+    }
+
+    // Mobile: tilt with device orientation (gamma = left/right, beta = front/back)
+    if (IS_TOUCH && window.DeviceOrientationEvent) {
+        const onOrient = e => {
+            const menu = document.getElementById('main-menu');
+            if (!menu || !menu.classList.contains('visible')) return;
+            const g = (e.gamma || 0) / 45; // -1..1 roughly
+            const b = ((e.beta || 0) - 30) / 45; // assume neutral at ~30° tilt
+            targetY = Math.max(-1, Math.min(1, g)) * MAX_TILT;
+            targetX = -Math.max(-1, Math.min(1, b)) * MAX_TILT;
+            queueTilt();
+        };
+        // iOS 13+ requires explicit permission — request on first menu show
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const askOnce = () => {
+                DeviceOrientationEvent.requestPermission().then(state => {
+                    if (state === 'granted') window.addEventListener('deviceorientation', onOrient);
+                }).catch(() => {});
+                window.removeEventListener('pointerdown', askOnce);
+            };
+            window.addEventListener('pointerdown', askOnce, { once: true });
+        } else {
+            window.addEventListener('deviceorientation', onOrient);
+        }
+    }
+})();
 
 // When game ends (win or lose), award pearls and return to necklace map
 function returnToMenuAfterGame() {
