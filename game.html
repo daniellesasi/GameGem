@@ -1228,6 +1228,10 @@ let stagePearlSpawn = true;
 let stageItemScale  = 1;
 let stageMaxPearls    = Infinity; // total pearls allowed to ever spawn this stage
 let stagePearlsSpawned = 0;       // counter, resets each startGame
+// Track the peak coverage the player has reached this stage. New gem spawns
+// size themselves against this peak instead of current coverage, so a bomb
+// hit (which drops coverage) doesn't shrink subsequent gems.
+let _peakCoverage = 0;
 // Mid-level spotlight spike: extra lights appear briefly to raise stakes
 let _spikeArmed     = false; // stage allows a spike?
 let _spikeFired     = false; // already triggered once?
@@ -1291,7 +1295,10 @@ function spawn(far = true, overrideX, overrideY, type) {
         stagePearlsSpawned++;
     }
 
-    const growthFactor = Math.pow(1 + coveragePercent / 100, 2.32);
+    // Use the peak coverage so far so that a bomb hit (which drops coverage
+    // by stripping bones) doesn't shrink the next wave of gems back down.
+    const _gf = Math.max(coveragePercent, _peakCoverage);
+    const growthFactor = Math.pow(1 + _gf / 100, 2.32);
     const scale = (2.0 + Math.random() * 2.4) * growthFactor * (stageItemScale || 1);
     
     let sx, sy;
@@ -1777,6 +1784,7 @@ function update() {
     const targetWorldRadius = (canvas.height * 0.2) / camera.zoom;
     if (winPhase === 0) {
         coveragePercent = Math.min(100, Math.floor((maxLimbDist / targetWorldRadius) * 100));
+        if (coveragePercent > _peakCoverage) _peakCoverage = coveragePercent;
         scoreEl.innerText = coveragePercent;
         if (coveragePercent >= 100) {
             // Enter "absorb" phase — winPhase 1 cranks vacuum range so any
@@ -4686,6 +4694,7 @@ function startGame() {
     stageItemScale  = _cfg.itemScale || 1;
     stageMaxPearls  = (typeof _cfg.maxPearls === 'number') ? _cfg.maxPearls : Infinity;
     stagePearlsSpawned = 0;
+    _peakCoverage = 0;
     _spikeArmed = !!_cfg.spotlightSpike;
     _spikeFired = false;
     _spikeStart = 0;
