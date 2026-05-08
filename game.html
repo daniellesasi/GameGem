@@ -1226,6 +1226,12 @@ let stageItemTypes  = standardItems.slice();
 let stageEnemyTypes = ['standard', 'pointDrainer1'];
 let stagePearlSpawn = true;
 let stageItemScale  = 1;
+let stageMaxPearls    = Infinity; // total pearls allowed to ever spawn this stage
+let stagePearlsSpawned = 0;       // counter, resets each startGame
+// Mid-level spotlight spike: extra lights appear briefly to raise stakes
+let _spikeArmed = false; // stage allows a spike?
+let _spikeFired = false; // already triggered once?
+let _spikeStart = 0;     // performance.now() when spike fired
 
 function getLeastUsedItemType() {
     const pool = stageItemTypes.length > 0 ? stageItemTypes : standardItems;
@@ -1273,8 +1279,15 @@ function spawn(far = true, overrideX, overrideY, type) {
     let chosenType = type;
     if (!chosenType) {
         const r = Math.random();
-        if (r < 0.04 && stagePearlSpawn) chosenType = 'pearl';
-        else chosenType = getLeastUsedItemType(); // Dynamically ensures all items appear evenly
+        if (r < 0.04 && stagePearlSpawn && stagePearlsSpawned < stageMaxPearls) {
+            chosenType = 'pearl';
+            stagePearlsSpawned++;
+        } else {
+            chosenType = getLeastUsedItemType();
+        }
+    } else if (chosenType === 'pearl') {
+        // Explicit pearl spawn (e.g. tutorial) also counts toward the cap
+        stagePearlsSpawned++;
     }
 
     const growthFactor = Math.pow(1 + coveragePercent / 100, 2.32);
@@ -1352,14 +1365,13 @@ items.push(spawn(false, undefined, undefined, 'shard1'));
 items.push(spawn(false, undefined, undefined, 'shard2'));
 
 let spotlights = [];
-function initSpotlights() {
+function _addSpotlights(count, isSpike) {
     const colors = ['255,245,200', '220,240,255', '255,255,255'];
     const viewR = Math.hypot(canvas.width / camera.zoom, canvas.height / camera.zoom) / 2;
-    for(let i=0; i<8; i++) {
+    for (let i = 0; i < count; i++) {
         const spawnAngle = Math.random() * Math.PI * 2;
         const orbitR = 1200 + Math.random() * 800;
-        const dist = viewR + orbitR + 500 + Math.random() * 1000; 
-
+        const dist = viewR + orbitR + 500 + Math.random() * 1000;
         spotlights.push({
             cx: player.x + Math.cos(spawnAngle) * dist,
             cy: player.y + Math.sin(spawnAngle) * dist,
@@ -1369,10 +1381,12 @@ function initSpotlights() {
             r: 800 + Math.random()*300,
             sq: 0.5 + Math.random()*0.3,
             rot: Math.random()*Math.PI,
-            color: colors[Math.floor(Math.random() * colors.length)]
+            color: colors[Math.floor(Math.random() * colors.length)],
+            isSpike: !!isSpike
         });
     }
 }
+function initSpotlights() { _addSpotlights(8, false); }
 initSpotlights();
 
 // ─────────────────────────────────────────────
@@ -1773,6 +1787,24 @@ function update() {
             else if (performance.now() - _winAbsorbDoneTime >= 1000) _showWinScreen();
         } else {
             _winAbsorbDoneTime = 0; // reset if anything reappears
+        }
+    }
+
+    // Mid-level spotlight spike: at the rough middle of the level (40% coverage)
+    // we briefly add extra spotlights to raise the chance of getting caught.
+    // After ~6s the spike spotlights are removed. Only fires once per stage.
+    if (_spikeArmed && winPhase === 0) {
+        if (!_spikeFired && coveragePercent >= 40 && coveragePercent < 75) {
+            _spikeFired = true;
+            _spikeStart = performance.now();
+            _addSpotlights(5, true); // 5 extra lights, marked as spike
+        }
+        if (_spikeFired && _spikeStart > 0 && performance.now() - _spikeStart >= 6000) {
+            // Remove spike-tagged spotlights
+            for (let i = spotlights.length - 1; i >= 0; i--) {
+                if (spotlights[i].isSpike) spotlights.splice(i, 1);
+            }
+            _spikeStart = 0; // mark cleanup done
         }
     }
 
@@ -4631,6 +4663,11 @@ function startGame() {
     stageEnemyTypes = _cfg.enemyTypes.slice();
     stagePearlSpawn = _cfg.pearlSpawn;
     stageItemScale  = _cfg.itemScale || 1;
+    stageMaxPearls  = (typeof _cfg.maxPearls === 'number') ? _cfg.maxPearls : Infinity;
+    stagePearlsSpawned = 0;
+    _spikeArmed = !!_cfg.spotlightSpike;
+    _spikeFired = false;
+    _spikeStart = 0;
 
     // Re-seed items — cap at 25 on mobile to keep 60fps. Tutorial stage opens
     // empty; the intro tick spawns pearl + enemy and populates the rest later.
@@ -4644,8 +4681,9 @@ function startGame() {
 
     // Re-seed enemies (or leave empty for early stages / tutorial)
     enemies.length = 0;
+    const _enemyCount = (typeof _cfg.enemyCount === 'number') ? _cfg.enemyCount : 6;
     if (stageEnemyTypes.length > 0 && !_cfg.isPearlIntro) {
-        for (let i = 0; i < 6; i++) { const e = spawnEnemy(); if (e) enemies.push(e); }
+        for (let i = 0; i < _enemyCount; i++) { const e = spawnEnemy(); if (e) enemies.push(e); }
     }
 
     pearlIntro.phase = _cfg.isPearlIntro ? 'opening' : 'idle';
@@ -4708,16 +4746,16 @@ const HEART_MAX = 5;
 const STAGE_CONFIG = [
     /* 1  Emerald     */ { itemTypes: ['shard4'],                                                                                                                  itemCount: 8,  itemScale: 3.2, enemyTypes: [],                            spotlights: false, pearlSpawn: false },
     /* 2  Tiger's Eye */ { itemTypes: ['shard4', 'shard3'],                                                                                                        itemCount: 38, itemScale: 2.0, enemyTypes: [],                            spotlights: false, pearlSpawn: false },
-    /* 3  Moonstone   */ { itemTypes: ['shard4', 'shard3', 'shard6'],                                                                                              itemCount: 35, itemScale: 1.7, enemyTypes: [],                            spotlights: true,  pearlSpawn: false },
-    /* 4  Kunzite     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5'],                                                                                    itemCount: 33, itemScale: 1.5, enemyTypes: [],                            spotlights: true,  pearlSpawn: false },
-    /* 5  Topaz       */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3'],                                                                         itemCount: 30, itemScale: 1.3, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: false },
-    /* 6  Garnet      */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1'],                                                              itemCount: 28, itemScale: 1.2, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: false },
+    /* 3  Moonstone   */ { itemTypes: ['shard4', 'shard3', 'shard6'],                                                                                              itemCount: 35, itemScale: 1.7, enemyTypes: [],                            spotlights: true,  pearlSpawn: false, spotlightSpike: true },
+    /* 4  Kunzite     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5'],                                                                                    itemCount: 33, itemScale: 1.5, enemyTypes: [],                            spotlights: true,  pearlSpawn: false, spotlightSpike: true },
+    /* 5  Topaz       */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3'],                                                                         itemCount: 30, itemScale: 1.5, enemyTypes: ['standard'],                  spotlights: false, pearlSpawn: false },
+    /* 6  Garnet      */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1'],                                                              itemCount: 28, itemScale: 1.4, enemyTypes: ['pointDrainer1'],             spotlights: false, pearlSpawn: false },
     /* 7  Citrine     */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4'],                                                   itemCount: 26, itemScale: 1.1, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: true,  isPearlIntro: true },
-    /* 8  Sapphire    */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2'],                                         itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1'],             spotlights: true,  pearlSpawn: true  },
-    /* 9  Jade        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem'],                                  itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1'],             spotlights: false, pearlSpawn: false },
-    /* 10 Ruby        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1'],                        itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1', 'standard'], spotlights: true,  pearlSpawn: true  },
-    /* 11 Amber       */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1', 'custom5'],             itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1', 'standard'], spotlights: true,  pearlSpawn: true  },
-    /* 12 Golden Gem  */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1', 'custom5', 'custom2'],   itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1', 'standard'], spotlights: true,  pearlSpawn: true  },
+    /* 8  Sapphire    */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2'],                                         itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1'],             spotlights: true,  pearlSpawn: true,  maxPearls: 2 },
+    /* 9  Jade        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem'],                                  itemCount: 25, itemScale: 1.0, enemyTypes: ['standard'],                  spotlights: true,  pearlSpawn: true,  maxPearls: 2 },
+    /* 10 Ruby        */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1'],                        itemCount: 25, itemScale: 1.2, enemyTypes: ['pointDrainer1', 'standard'], enemyCount: 4, spotlights: true, pearlSpawn: true, maxPearls: 5 },
+    /* 11 Amber       */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1', 'custom5'],             itemCount: 25, itemScale: 1.0, enemyTypes: ['pointDrainer1', 'standard'], enemyCount: 6, spotlights: true, pearlSpawn: true, maxPearls: 4 },
+    /* 12 Golden Gem  */ { itemTypes: ['shard4', 'shard3', 'shard6', 'shard5', 'custom3', 'custom1', 'custom4', 'shard2', 'gem', 'shard1', 'custom5', 'custom2'],   itemCount: 28, itemScale: 0.85, enemyTypes: ['pointDrainer1', 'standard'], enemyCount: 8, spotlights: true, pearlSpawn: true, maxPearls: 3 },
 ];
 
 const HEART_REGEN_MS = 2 * 60 * 60 * 1000; // 2 hours
