@@ -900,7 +900,30 @@ let hitSplashes = [];
 let deathTimer = 0;
 let DEATH_DUR = 440;             // recomputed when death starts
 const MELT_DELAY = 60;           // 1s freeze before melt starts (60fps)
-let _meltStarted = false;        // becomes true once goo blobs spawn
+const MELT_DUR   = 180;          // 3s melt
+let _meltStarted = false;        // becomes true once melt animation begins
+
+// Returns the melt progression t (0 = freeze, 1 = fully melted) for the
+// current frame. Used to squish the player's body and face during the
+// game-over animation.
+function _meltT() {
+    if (winPhase !== 3) return 0;
+    return Math.max(0, Math.min(1, (deathTimer - MELT_DELAY) / MELT_DUR));
+}
+// Apply a "melting" transform to a context, centered on the player. After
+// the freeze period, the body is squished vertically + stretched
+// horizontally + sinks downward, simulating a puddle forming.
+function _applyMeltTransform(c) {
+    const t = _meltT();
+    if (t <= 0) return;
+    const e   = t * t * (3 - 2 * t);  // smoothstep
+    const sqY = 1 - e * 0.94;         // squish vertically
+    const sqX = 1 + e * 1.2;          // spread horizontally
+    const dy  = e * (player.baseR * 0.6); // sink downward
+    c.translate(player.x, player.y + dy);
+    c.scale(sqX, sqY);
+    c.translate(-player.x, -player.y);
+}
 let deathMeltStart = 300;    // frame inside death when melt begins
 let deathPops = [];          // scheduled item pops
 let deathFlyItems = [];      // visual items flying off after pop
@@ -1993,7 +2016,7 @@ function update() {
                             deathTimer = 0;
                             gooBlobs = [];
                             _meltStarted = false;
-                            DEATH_DUR = MELT_DELAY + 300; // 1s freeze + 5s melt
+                            DEATH_DUR = MELT_DELAY + 180; // 1s freeze + 3s melt
                             haptic([60, 30, 100]);
                         }
                     } else {
@@ -2164,42 +2187,14 @@ function update() {
         if (p.life <= 0 || Math.hypot(player.x-p.x,(player.y-15)-p.y) < 15) player.particles.splice(i, 1);
     });
 
-    // Death animation update
+    // Death animation update — pure freeze + melt, no goo blobs.
     if (winPhase === 3) {
         deathTimer += dt;
-        // After the 1s freeze, kick off the actual melt: spawn goo blobs +
-        // shake/flash for impact. Until then the player just stands frozen.
+        // Tiny bump at melt-start so the moment the squish begins is felt.
         if (!_meltStarted && deathTimer >= MELT_DELAY) {
             _meltStarted = true;
-            shakeTime = 50;
-            flashAlpha = 1.2;
-            haptic([40, 20, 80, 20, 120]);
-            spawnHitSplash(player.x, player.y);
-            for (let i = 0; i < 35; i++) {
-                const ang = Math.random() * Math.PI * 2;
-                const spd = 10 + Math.random() * 28;
-                gooBlobs.push({
-                    x: player.x + (Math.random()-0.5)*120,
-                    y: player.y - 10 + (Math.random()-0.5)*70,
-                    vx: Math.cos(ang)*spd*1.8,
-                    vy: Math.sin(ang)*spd*1.4 - 18,
-                    r: 8 + Math.random()*30,
-                    landed: false, landY: 0,
-                    squeezed: 0, wobble: Math.random()*Math.PI*2,
-                    alpha: 0.85 + Math.random()*0.15,
-                });
-            }
+            haptic([35, 15, 60]);
         }
-        gooBlobs.forEach(b => {
-            if (!b.landed) {
-                b.vy += 0.85 * dt; b.x += b.vx * dt; b.y += b.vy * dt;
-                b.vx *= Math.pow(0.95, dt); b.vy *= Math.pow(0.98, dt);
-                if (b.vy > 0 && b.y > player.y + 40) { b.landed = true; b.landY = b.y; }
-            } else {
-                b.squeezed = Math.min(1, b.squeezed + 0.055 * dt);
-            }
-            b.wobble += 0.07 * dt;
-        });
         if (deathTimer >= DEATH_DUR) {
             const overlay = document.getElementById('game-over-overlay');
             if (overlay && !overlay.classList.contains('visible')) {
@@ -2773,6 +2768,11 @@ function draw() {
         entityCtx.translate(-player.x, -player.y);
     }
 
+    // Wrap the player section in the melt transform — applies during the
+    // game-over animation so body + bones squish together as one form.
+    entityCtx.save();
+    _applyMeltTransform(entityCtx);
+
     player.particles.forEach(p => {
         entityCtx.strokeStyle = `rgba(255,255,255,${p.life*0.3})`;
         entityCtx.lineWidth = p.w;
@@ -2950,6 +2950,8 @@ function draw() {
         entityCtx.restore();
     }
 
+    entityCtx.restore(); // end melt-transform wrap (player block)
+
     items.forEach(it => {
         if (!it.active || it.sucking <= 0.05) return;
         const mx = player.x, my = player.y - 15;
@@ -2980,12 +2982,19 @@ function draw() {
     entityCtx.restore();
 
     ctx.globalCompositeOperation = 'source-over';
-    if (winPhase !== 3) {
+    // Always composite the entity canvas. During the death melt the player's
+    // squish is already applied inside the entityCtx draw via the transform
+    // wrap. Fade the whole composite at the very end of the melt so the
+    // puddle softly disappears before the controls fade in.
+    let _entA = 1;
+    if (winPhase === 3) {
+        const tail = Math.max(0, deathTimer - (MELT_DELAY + MELT_DUR));
+        _entA = Math.max(0, 1 - tail / 30); // fade over last 0.5s
+    }
+    if (_entA > 0) {
+        ctx.globalAlpha = _entA;
         ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
-    } else {
-        // Dissolve the entity canvas out quickly — procedural liquid blob takes over
-        const _entA = Math.max(0, 1 - Math.max(0, deathTimer - MELT_DELAY) / 50);
-        if (_entA > 0) { ctx.globalAlpha = _entA; ctx.drawImage(entityCanvas, 0, 0, view.w, view.h); ctx.globalAlpha = 1; }
+        ctx.globalAlpha = 1;
     }
 
     // Pearl glares drawn on main ctx in screen space — after entityCanvas, so they render on top
@@ -3059,7 +3068,10 @@ function draw() {
     }
 
     // ── UNIFIED DEATH / NORMAL DRAW ──────────────────────────────────────
-    if (winPhase === 3) {
+    // Single rendering path. The melt animation is achieved via the
+    // _applyMeltTransform() wrap on the player draws (entityCtx body and
+    // main ctx face), not via a separate death-only branch.
+    if (false) {
         // dp 0→1 over 300 frames AFTER the freeze; ease-in so melt starts slow then flows fast
         const dp   = Math.min(1, Math.max(0, deathTimer - MELT_DELAY) / 300);
         const ease = dp * dp * (3 - 2 * dp); // smoothstep: slow-fast-slow
@@ -3204,6 +3216,8 @@ function draw() {
         }
 
         ctx.save();
+        // Apply the same melt transform to the face so it squishes with the body
+        _applyMeltTransform(ctx);
         ctx.translate(player.x, player.y-15);
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
