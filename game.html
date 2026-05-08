@@ -1807,27 +1807,16 @@ function update() {
         }
     }
 
-    // Mid-level spotlight spike: 12s into the stage we briefly drop in extra
-    // spotlights that orbit faster + closer. After ~6s the spike spotlights
-    // start fading out (never killed on-frame); they self-prune when faded.
-    if (_spikeArmed && winPhase === 0) {
+    // Mid-level spotlight spike: 12s into the stage we drop in extra
+    // spotlights from outside the frame. They stay for the rest of the
+    // stage — never forcibly removed. They're cleared with the rest of the
+    // spotlights when the next stage starts.
+    if (_spikeArmed && winPhase === 0 && !_spikeFired) {
         const stageElapsed = performance.now() - _stageStartTime;
-        if (!_spikeFired && stageElapsed >= 12000) {
+        if (stageElapsed >= 12000) {
             _spikeFired = true;
-            _spikeStart = performance.now();
             _addSpotlights(8, true); // 8 spike lights, spawn outside frame
         }
-        if (_spikeFired && _spikeStart > 0 && performance.now() - _spikeStart >= 6000) {
-            for (let i = 0; i < spotlights.length; i++) {
-                if (spotlights[i].isSpike) spotlights[i].targetAlpha = 0;
-            }
-            _spikeStart = 0;
-        }
-    }
-    // Prune fully-faded spotlights (handles spike fade-out cleanly)
-    for (let i = spotlights.length - 1; i >= 0; i--) {
-        const s = spotlights[i];
-        if (s.targetAlpha === 0 && (s.alpha || 0) < 0.02) spotlights.splice(i, 1);
     }
 
     if (shakeTime > 0) shakeTime -= dt;
