@@ -4707,6 +4707,8 @@ function startGame() {
         alert('No hearts left! Wait for them to regenerate.');
         return;
     }
+    // Mark the customizer as seen so subsequent stages skip straight to play
+    localStorage.setItem('customizerSeen', '1');
     window.PLAYER_COLOR = currentColor;
     window.PLAYER_EYE_TYPE = EYE_TYPE_MAP[currentEyeIndex];
     window.PLAYER_LIP_TYPE = LIP_TYPE_MAP[currentLipIndex];
@@ -5386,6 +5388,13 @@ function startStage(stageNum) {
     playingStage = stageNum;
     _updateStageLabel();
     document.getElementById('main-menu').classList.remove('visible');
+    // Customizer only shows the very first time. After that, dive straight
+    // into gameplay. (User can still tap the avatar to open the customizer
+    // manually via openCustomizer.)
+    if (localStorage.getItem('customizerSeen')) {
+        startGame();
+        return;
+    }
     document.getElementById('customizer-overlay').style.display = 'flex';
     requestAnimationFrame(() => renderPreviewFace(document.getElementById('preview-face-canvas')));
 }
