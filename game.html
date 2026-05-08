@@ -1732,7 +1732,7 @@ function update() {
         if (spot && huntedTime <= 0) {
             // Glue effect — 0 at edge, 1 at center, squared for non-linear feel
             const _dDist = Math.hypot(player.x - spot.x, player.y - spot.y);
-            const insideT = Math.max(0, 1 - _dDist / (spot.r * 0.85));
+            const insideT = Math.max(0, 1 - _dDist / (spot.r + player.baseR * 0.6));
             // Remapped so even the rim (insideT~0) has ~50% of the full effect
             // stickyT goes from 0.5 at the edge to 1.0 at the center
             const stickyT = 0.5 + 0.5 * insideT;
@@ -2018,7 +2018,10 @@ function update() {
 
         // ── DANGER ZONE: player inside spotlight ───────────────────────────
         const _dDist = Math.hypot(player.x - s.x, player.y - s.y);
-        s.danger = (winPhase === 0) && huntedTime <= 0 && _dDist < s.r * 0.85;
+        // Collision now matches the visible light radius + the player's body
+        // radius — so the danger triggers as soon as the player's silhouette
+        // touches the light's edge, not only when fully buried inside it.
+        s.danger = (winPhase === 0) && huntedTime <= 0 && _dDist < s.r + player.baseR * 0.6;
         if (s.danger) {
             spotlightDanger = true;
             // Store the capturing spotlight so movement code can apply glue
