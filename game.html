@@ -2768,11 +2768,6 @@ function draw() {
         entityCtx.translate(-player.x, -player.y);
     }
 
-    // Wrap the player section in the melt transform — applies during the
-    // game-over animation so body + bones squish together as one form.
-    entityCtx.save();
-    _applyMeltTransform(entityCtx);
-
     player.particles.forEach(p => {
         entityCtx.strokeStyle = `rgba(255,255,255,${p.life*0.3})`;
         entityCtx.lineWidth = p.w;
@@ -2810,6 +2805,41 @@ function draw() {
         dist += Math.max(0, Math.sin(a*4+player.anim.time*2.5)*8 + Math.cos(a*7-player.anim.time*1.5)*5);
         pts.push({ x: player.x+dx*dist, y: player.y+dy*dist });
     }
+
+    // ── DEATH MELT — per-vertex deformation of the body silhouette ─────────
+    // Each silhouette point is displaced organically so the top of the body
+    // drips downward, the bottom widens into a puddle, and certain points
+    // become "drip strands" that lengthen further into liquid streams.
+    const _meltAmt = _meltT();
+    if (_meltAmt > 0) {
+        const e = _meltAmt * _meltAmt * (3 - 2 * _meltAmt);
+        const t = player.anim.time * 1.7 + deathTimer * 0.018;
+        for (let i = 0; i < pts.length; i++) {
+            const pt = pts[i];
+            const yRel = pt.y - player.y;
+            const xRel = pt.x - player.x;
+            const ang  = Math.atan2(yRel, xRel);
+            // Top points (yRel < 0) drip down, scaled by how high they are.
+            const topness = Math.max(0, -yRel / Math.max(1, player.baseR));
+            const dripBase = topness * topness * e * player.baseR * 1.6;
+            // Bottom points (yRel >= 0) sink + spread to form the puddle.
+            const bottomness = Math.max(0, yRel / Math.max(1, player.baseR));
+            const sink = e * player.baseR * 0.45;
+            const spread = xRel * e * (0.25 + bottomness * 1.0);
+            // A handful of vertices become long drip strands that stretch
+            // farther down than their neighbours — gives a real "candle wax"
+            // feel rather than a uniform squish.
+            const dripSeed = Math.sin(i * 12.9898) * 43758.5453;
+            const dripFrac = dripSeed - Math.floor(dripSeed);
+            const isStrand = dripFrac < 0.18;
+            const strandLen = isStrand ? (e * e * player.baseR * (1.2 + dripFrac * 4)) : 0;
+            // Subtle wobble so the surface isn't glassy-smooth.
+            const wobble = Math.sin(ang * 4 + t) * e * 6 + Math.cos(ang * 7 - t * 0.6) * e * 4;
+            pt.x += spread;
+            pt.y += dripBase + sink + strandLen + wobble;
+        }
+    }
+
     const bodyPath = new Path2D();
     pts.forEach((pt, i) => { if (i===0) bodyPath.moveTo(pt.x,pt.y); else bodyPath.lineTo(pt.x,pt.y); });
     bodyPath.closePath();
@@ -2920,12 +2950,28 @@ function draw() {
 
     entityCtx.save();
     entityCtx.clip(bodyPath);
-    player.bones.forEach(b => {
+    // During the melt, individual bones (gems) slide downward at staggered
+    // rates so they look like they're sinking into the puddle. Higher bones
+    // travel further. Plus a tiny per-bone "drip wobble" so they don't
+    // descend in lockstep.
+    const _boneMelt = _meltT();
+    const _boneE    = _boneMelt > 0 ? _boneMelt * _boneMelt * (3 - 2 * _boneMelt) : 0;
+    player.bones.forEach((b, _i) => {
         entityCtx.save();
-        entityCtx.translate(player.x+b.curX, player.y+b.curY);
-        entityCtx.rotate(b.rot);
+        let bx = player.x + b.curX;
+        let by = player.y + b.curY;
+        if (_boneE > 0) {
+            const aboveness = Math.max(0, -b.curY / Math.max(1, player.baseR));
+            const dropAmt   = (0.4 + aboveness * 1.4) * _boneE * player.baseR;
+            const wobble    = Math.sin(_i * 1.7 + deathTimer * 0.05) * _boneE * 6;
+            const slump     = Math.sin(_i * 2.3) * _boneE * 0.25; // lateral drift
+            bx += b.curX * slump;
+            by += dropAmt + wobble;
+        }
+        entityCtx.translate(bx, by);
+        entityCtx.rotate(b.rot + _boneE * Math.sin(_i) * 0.6);
         entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
-        draw3DItem(entityCtx, b, player.x+b.curX, player.y+b.curY, false, true);
+        draw3DItem(entityCtx, b, bx, by, false, true);
         entityCtx.restore();
     });
     
@@ -2949,8 +2995,6 @@ function draw() {
         entityCtx.stroke(bodyPath);
         entityCtx.restore();
     }
-
-    entityCtx.restore(); // end melt-transform wrap (player block)
 
     items.forEach(it => {
         if (!it.active || it.sucking <= 0.05) return;
@@ -3216,8 +3260,15 @@ function draw() {
         }
 
         ctx.save();
-        // Apply the same melt transform to the face so it squishes with the body
-        _applyMeltTransform(ctx);
+        // During the death melt, the face sinks downward + spreads slightly
+        // so the head visually melts WITH the body rather than detaching from it.
+        const _faceMelt = _meltT();
+        if (_faceMelt > 0) {
+            const e = _faceMelt * _faceMelt * (3 - 2 * _faceMelt);
+            ctx.translate(player.x, player.y - 15 + e * player.baseR * 0.55);
+            ctx.scale(1 + e * 0.45, 1 - e * 0.55);
+            ctx.translate(-player.x, -(player.y - 15));
+        }
         ctx.translate(player.x, player.y-15);
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
