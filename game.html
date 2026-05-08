@@ -823,6 +823,12 @@ let _stage1BgGrad = null; // cached once, invalidated on resize
 function resizeCanvas() {
     canvas.width = entityCanvas.width = lightCanvas.width  = window.innerWidth;
     canvas.height = entityCanvas.height = lightCanvas.height = window.innerHeight;
+    // Re-apply smoothing — canvas.width/height assignment resets the
+    // context state including imageSmoothingQuality back to 'low'.
+    [ctx, entityCtx, lightCtx].forEach(c => {
+        c.imageSmoothingEnabled = true;
+        c.imageSmoothingQuality = 'high';
+    });
     _stage1BgGrad = null; // invalidate cache on resize
 }
 window.addEventListener('resize', resizeCanvas);
@@ -2240,10 +2246,10 @@ function _getItemCache(type, grayscale) {
         return '#' + l + l + l;
     };
 
-    // Render the cache at 5× pixel density (25× pixel area) so the polygons
+    // Render the cache at 8× pixel density (64× pixel area) so the polygons
     // have plenty of detail when scaled up. The logical "display size" stays
     // = baseSize so on-screen footprint is unchanged.
-    const SUPERSAMPLE = 5;
+    const SUPERSAMPLE = 8;
     const pad = 4;
     const baseSize = shape.maxDim + pad * 2;
     const canvasSize = baseSize * SUPERSAMPLE;
