@@ -1822,6 +1822,33 @@ function update() {
     Object.values(player.currentGrowth).forEach(g => { if (player.baseR+g > maxLimbDist) maxLimbDist = player.baseR+g; });
 
     player.bones.forEach(b => {
+        // During the death melt, gems detach from their slot springs and
+        // free-fall with gravity so they spill out and rest on the ground.
+        if (winPhase === 3 && _meltStarted && !b.isFaceItem) {
+            if (!b._meltInit) {
+                b._meltInit = true;
+                // Initial outward + slight upward kick from the body
+                const _a = Math.atan2(b.curY, b.curX || 0.001);
+                const _spd = 1.5 + Math.random() * 2.0;
+                b._mvx = Math.cos(_a) * _spd + (Math.random() - 0.5) * 1.5;
+                b._mvy = Math.sin(_a) * _spd * 0.5 - 1.5 - Math.random() * 1.5;
+                b._mvr = (Math.random() - 0.5) * 0.04;
+                b._meltSettled = false;
+            }
+            if (!b._meltSettled) {
+                b._mvy += 0.42 * dt;          // gravity
+                b._mvx *= Math.pow(0.96, dt); // air drag
+                b.curX += b._mvx * dt;
+                b.curY += b._mvy * dt;
+                b.rot  += b._mvr * dt;
+                if (b.curY > player.baseR * 0.5 && b._mvy > 0) {
+                    b._meltSettled = true;
+                    b._mvx = 0; b._mvy = 0; b._mvr = 0;
+                }
+            }
+            return; // skip the spring update
+        }
+
         const tx = Math.cos(b.relAngle)*b.relDist, ty = Math.sin(b.relAngle)*b.relDist;
         const boneLerp = 1 - Math.pow(1 - 0.45, dt);
         b.curX += (tx - b.curX)*boneLerp - player.vx*vMult*0.2;
@@ -2187,9 +2214,8 @@ function update() {
         if (p.life <= 0 || Math.hypot(player.x-p.x,(player.y-15)-p.y) < 15) player.particles.splice(i, 1);
     });
 
-    // Death animation: 1s freeze, then the body deflates as one cohesive
-    // flat shape — no shattering, no drips, no separate puddle. Pure
-    // body-deforms-and-sags-down.
+    // Death animation: 1s freeze, then the gems detach and physics-fall out
+    // of the body, plus 3 small flat atmospheric drips peel off.
     if (winPhase === 3) {
         deathTimer += dt;
         if (!_meltStarted && deathTimer >= MELT_DELAY) {
@@ -2197,7 +2223,36 @@ function update() {
             shakeTime = 14;
             haptic([35, 15, 60]);
             gooBlobs = [];
+            for (let i = 0; i < 3; i++) {
+                const a = -Math.PI/2 + (Math.random() - 0.5) * Math.PI;
+                const sp = 3 + Math.random() * 4;
+                gooBlobs.push({
+                    x: player.x + (Math.random() - 0.5) * player.baseR,
+                    y: player.y - 10 + (Math.random() - 0.5) * 20,
+                    vx: Math.cos(a) * sp + (Math.random() - 0.5) * 3,
+                    vy: -3 - Math.random() * 4,
+                    r: 6 + Math.random() * 6,
+                    landed: false,
+                    wobble: Math.random() * Math.PI * 2,
+                    alpha: 0.85
+                });
+            }
         }
+        const groundY = player.y + player.baseR * 0.55;
+        gooBlobs.forEach(b => {
+            if (!b.landed) {
+                b.vy += 0.45 * dt;
+                b.x += b.vx * dt;
+                b.y += b.vy * dt;
+                b.vx *= Math.pow(0.94, dt);
+                if (b.y >= groundY && b.vy > 0) {
+                    b.landed = true;
+                    b.y = groundY + (Math.random() - 0.5) * 4;
+                    b.vy = 0;
+                }
+            }
+            b.wobble += 0.05 * dt;
+        });
         if (deathTimer >= DEATH_DUR) {
             const overlay = document.getElementById('game-over-overlay');
             if (overlay && !overlay.classList.contains('visible')) {
@@ -2808,32 +2863,6 @@ function draw() {
         dist += Math.max(0, Math.sin(a*4+player.anim.time*2.5)*8 + Math.cos(a*7-player.anim.time*1.5)*5);
         pts.push({ x: player.x+dx*dist, y: player.y+dy*dist });
     }
-
-    // ── DEATH DEFLATE — body sags as one cohesive shape ───────────────────
-    // Top points fall furthest, bottom points spread; vertical extent
-    // shrinks toward the ground. A small wobble keeps the surface alive.
-    const _meltAmt = _meltT();
-    if (_meltAmt > 0) {
-        const e = _meltAmt * _meltAmt * (3 - 2 * _meltAmt);
-        const baseR = Math.max(1, player.baseR);
-        for (let i = 0; i < pts.length; i++) {
-            const pt = pts[i];
-            const yRel = pt.y - player.y;
-            const xRel = pt.x - player.x;
-            const topness    = Math.max(0, -yRel / baseR);
-            const bottomness = Math.max(0,  yRel / baseR);
-            // Vertical squish — body collapses downward
-            const newYRel = yRel * (1 - e * 0.78) + topness * baseR * e * 0.9;
-            // Horizontal spread — bottom widens more than top
-            const spreadF = 1 + e * (0.25 + bottomness * 0.55);
-            // Tiny wobble for organic edge
-            const ang = Math.atan2(yRel, xRel);
-            const wob = Math.sin(ang * 4 + deathTimer * 0.07) * e * 4;
-            pt.y = player.y + newYRel + wob;
-            pt.x = player.x + xRel * spreadF;
-        }
-    }
-
     const bodyPath = new Path2D();
     pts.forEach((pt, i) => { if (i===0) bodyPath.moveTo(pt.x,pt.y); else bodyPath.lineTo(pt.x,pt.y); });
     bodyPath.closePath();
@@ -2944,27 +2973,19 @@ function draw() {
 
     entityCtx.save();
     entityCtx.clip(bodyPath);
-    // While the body deflates, gems collapse toward the body's centre then
-    // sink with it — top gems travel furthest down so they appear to slide
-    // off the head and onto the puddle.
-    const _boneE = _meltAmt * _meltAmt * (3 - 2 * _meltAmt);
-    player.bones.forEach((b, _i) => {
-        entityCtx.save();
-        let bx = player.x + b.curX;
-        let by = player.y + b.curY;
-        if (_boneE > 0) {
-            const aboveness = Math.max(0, -b.curY / Math.max(1, player.baseR));
-            // Slide down with body
-            by += player.baseR * _boneE * (0.35 + aboveness * 0.6);
-            // Collapse toward centre x slightly so gems pool toward middle
-            bx -= b.curX * _boneE * 0.18;
-        }
-        entityCtx.translate(bx, by);
-        entityCtx.rotate(b.rot);
-        entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
-        draw3DItem(entityCtx, b, bx, by, false, true);
-        entityCtx.restore();
-    });
+    // Skip in-body gem rendering once the melt has begun — the gems are
+    // detached and rendered separately (with free physics) outside the clip.
+    const _bonesDetached = winPhase === 3 && _meltStarted;
+    if (!_bonesDetached) {
+        player.bones.forEach(b => {
+            entityCtx.save();
+            entityCtx.translate(player.x+b.curX, player.y+b.curY);
+            entityCtx.rotate(b.rot);
+            entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
+            draw3DItem(entityCtx, b, player.x+b.curX, player.y+b.curY, false, true);
+            entityCtx.restore();
+        });
+    }
     
     // Body fill uses customized player color
     entityCtx.fillStyle = hexToRgba(window.PLAYER_COLOR, 0.85); entityCtx.fill(bodyPath);
@@ -2985,6 +3006,21 @@ function draw() {
         entityCtx.lineWidth = 2.5;
         entityCtx.stroke(bodyPath);
         entityCtx.restore();
+    }
+
+    // Death melt — render the detached gems OUTSIDE the body clip so they
+    // are visible falling/resting around the player. Same gem polygons used
+    // in-game; no special asset.
+    if (winPhase === 3 && _meltStarted) {
+        player.bones.forEach(b => {
+            if (b.isFaceItem) return;
+            entityCtx.save();
+            entityCtx.translate(player.x + b.curX, player.y + b.curY);
+            entityCtx.rotate(b.rot);
+            entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
+            draw3DItem(entityCtx, b, player.x + b.curX, player.y + b.curY, false, false);
+            entityCtx.restore();
+        });
     }
 
     items.forEach(it => {
@@ -3251,14 +3287,31 @@ function draw() {
         }
 
 
-        // During the deflate, the face sinks with the body and squishes
-        // along with it (matches the per-vertex body deformation).
-        const _faceMelt = _meltT();
-        const _faceE = _faceMelt > 0 ? _faceMelt * _faceMelt * (3 - 2 * _faceMelt) : 0;
+        // Flat atmospheric drips (matching player color, no gradient/specular)
+        if (winPhase === 3 && _meltStarted && gooBlobs.length > 0) {
+            ctx.save();
+            ctx.fillStyle = window.PLAYER_COLOR;
+            gooBlobs.forEach(b => {
+                ctx.beginPath();
+                const M = 16;
+                for (let i = 0; i < M; i++) {
+                    const a = (i / M) * Math.PI * 2;
+                    const wob = 1 + Math.sin(a*3 + b.wobble) * 0.1;
+                    const r = b.r * wob;
+                    const px = b.x + Math.cos(a) * r;
+                    const py = b.y + Math.sin(a) * r * (b.landed ? 0.45 : 1);
+                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.globalAlpha = b.alpha;
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+
         ctx.save();
-        ctx.translate(player.x, player.y - 15 + _faceE * player.baseR * 0.55);
-        ctx.scale(1 + _faceE * 0.30, Math.max(0.05, 1 - _faceE * 0.85));
-        ctx.translate(0, 0);
+        ctx.translate(player.x, player.y-15);
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
