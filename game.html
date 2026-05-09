@@ -2187,49 +2187,17 @@ function update() {
         if (p.life <= 0 || Math.hypot(player.x-p.x,(player.y-15)-p.y) < 15) player.particles.splice(i, 1);
     });
 
-    // Death animation: 1s freeze, then the body cohesively deflates/sags
-    // into a flat puddle (drawn under the body). A handful of small flat
-    // drips peel off for splatter atmosphere.
+    // Death animation: 1s freeze, then the body deflates as one cohesive
+    // flat shape — no shattering, no drips, no separate puddle. Pure
+    // body-deforms-and-sags-down.
     if (winPhase === 3) {
         deathTimer += dt;
         if (!_meltStarted && deathTimer >= MELT_DELAY) {
             _meltStarted = true;
-            shakeTime = 18;
-            haptic([40, 18, 90]);
-            // Just 5 small flat drips that fly off as the body starts to
-            // soften — atmospheric only, the main visual is the body itself
-            // sagging into a puddle.
+            shakeTime = 14;
+            haptic([35, 15, 60]);
             gooBlobs = [];
-            for (let i = 0; i < 5; i++) {
-                const a = Math.random() * Math.PI * 2;
-                const r = player.baseR * 0.6;
-                gooBlobs.push({
-                    x: player.x + Math.cos(a) * r,
-                    y: player.y + Math.sin(a) * r * 0.6,
-                    vx: Math.cos(a) * (3 + Math.random() * 5),
-                    vy: -3 - Math.random() * 5,
-                    r: 5 + Math.random() * 7,
-                    landed: false,
-                    wobble: Math.random() * Math.PI * 2,
-                    alpha: 0.82
-                });
-            }
         }
-        const groundY = player.y + player.baseR * 0.55;
-        gooBlobs.forEach(b => {
-            if (!b.landed) {
-                b.vy += 0.55 * dt;
-                b.x += b.vx * dt;
-                b.y += b.vy * dt;
-                b.vx *= Math.pow(0.95, dt);
-                if (b.y >= groundY && b.vy > 0) {
-                    b.landed = true;
-                    b.y = groundY + (Math.random() - 0.5) * 3;
-                    b.vy = 0;
-                }
-            }
-            b.wobble += 0.05 * dt;
-        });
         if (deathTimer >= DEATH_DUR) {
             const overlay = document.getElementById('game-over-overlay');
             if (overlay && !overlay.classList.contains('visible')) {
@@ -3282,66 +3250,15 @@ function draw() {
             });
         }
 
-        // Death deflate — flat puddle ellipse grows under the body, plus a
-        // few flat drips peeling off. Same flat-shaded style as the body
-        // itself; no gradients, no specular. Drawn BEFORE the body sinks
-        // onto it so the puddle reads as ground-level.
-        if (winPhase === 3 && _meltStarted) {
-            const t = _meltT();
-            const e = t * t;
-            ctx.save();
-            ctx.fillStyle = window.PLAYER_COLOR;
-            ctx.globalAlpha = 0.85 * Math.min(1, e * 1.6);
-            // Wobbly puddle outline beneath the body
-            ctx.beginPath();
-            const N = 36;
-            const pcx = player.x;
-            const pcy = player.y + player.baseR * 0.5;
-            const prx = player.baseR * (0.45 + e * 1.6);
-            const pry = player.baseR * (0.13 + e * 0.32);
-            for (let i = 0; i < N; i++) {
-                const a = (i / N) * Math.PI * 2;
-                const wob = 1 + Math.sin(a * 3 + deathTimer * 0.06) * 0.05
-                              + Math.cos(a * 5 + deathTimer * 0.04) * 0.03;
-                const x = pcx + Math.cos(a) * prx * wob;
-                const y = pcy + Math.sin(a) * pry * wob;
-                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-            ctx.fill();
-            // Flat drips — no gradient, no shading
-            gooBlobs.forEach(b => {
-                ctx.beginPath();
-                const M = 16;
-                for (let i = 0; i < M; i++) {
-                    const a = (i / M) * Math.PI * 2;
-                    const wob = 1 + Math.sin(a*3 + b.wobble) * 0.1;
-                    const r = b.r * wob;
-                    const px = b.x + Math.cos(a) * r;
-                    const py = b.y + Math.sin(a) * r * (b.landed ? 0.4 : 1);
-                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-                ctx.globalAlpha = b.alpha;
-                ctx.fill();
-            });
-            ctx.globalAlpha = 1;
-            ctx.restore();
-        }
 
-        // During the deflate, the face sinks with the body's collapsing top
-        // and fades out as the body gets too flat to render features on.
+        // During the deflate, the face sinks with the body and squishes
+        // along with it (matches the per-vertex body deformation).
         const _faceMelt = _meltT();
         const _faceE = _faceMelt > 0 ? _faceMelt * _faceMelt * (3 - 2 * _faceMelt) : 0;
-        const _faceAlpha = Math.max(0, 1 - Math.max(0, _faceMelt - 0.5) * 2);
-        if (_faceAlpha <= 0.01) {
-            // Face fully melted — skip drawing
-        } else {
         ctx.save();
-        ctx.globalAlpha = _faceAlpha;
-        ctx.translate(player.x, player.y - 15 + _faceE * player.baseR * 0.5);
-        ctx.scale(1 + _faceE * 0.25, 1 - _faceE * 0.65);
-        ctx.translate(0, 0); // anchor at translated origin
+        ctx.translate(player.x, player.y - 15 + _faceE * player.baseR * 0.55);
+        ctx.scale(1 + _faceE * 0.30, Math.max(0.05, 1 - _faceE * 0.85));
+        ctx.translate(0, 0);
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
@@ -3510,8 +3427,6 @@ function draw() {
         }
 
         ctx.restore(); // face translate
-        ctx.globalAlpha = 1;
-        } // end face fade-out skip
 
         // World items rendered on the main ctx, AFTER the face features so
         // gems sit on top of everything (body → face → gem).
