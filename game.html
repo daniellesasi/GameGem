@@ -898,36 +898,7 @@ const pearlIntro = {
 let bombSparks = [];
 let hitSplashes = [];
 let deathTimer = 0;
-let DEATH_DUR = 440;             // recomputed when death starts
-const MELT_DELAY = 60;           // 1s freeze before melt starts (60fps)
-const MELT_DUR   = 180;          // 3s melt
-let _meltStarted = false;        // becomes true once melt animation begins
-
-// Returns the melt progression t (0 = freeze, 1 = fully melted) for the
-// current frame. Used to squish the player's body and face during the
-// game-over animation.
-function _meltT() {
-    if (winPhase !== 3) return 0;
-    return Math.max(0, Math.min(1, (deathTimer - MELT_DELAY) / MELT_DUR));
-}
-// Apply a "melting" transform to a context, centered on the player. After
-// the freeze period, the body is squished vertically + stretched
-// horizontally + sinks downward, simulating a puddle forming.
-function _applyMeltTransform(c) {
-    const t = _meltT();
-    if (t <= 0) return;
-    const e   = t * t * (3 - 2 * t);  // smoothstep
-    const sqY = 1 - e * 0.94;         // squish vertically
-    const sqX = 1 + e * 1.2;          // spread horizontally
-    const dy  = e * (player.baseR * 0.6); // sink downward
-    c.translate(player.x, player.y + dy);
-    c.scale(sqX, sqY);
-    c.translate(-player.x, -player.y);
-}
-let deathMeltStart = 300;    // frame inside death when melt begins
-let deathPops = [];          // scheduled item pops
-let deathFlyItems = [];      // visual items flying off after pop
-let gooBlobs = [];
+const DEATH_DUR = 60;            // brief pause after death before controls appear
 
 function spawnHitSplash(x, y) {
     // 1. Flash
@@ -1822,33 +1793,6 @@ function update() {
     Object.values(player.currentGrowth).forEach(g => { if (player.baseR+g > maxLimbDist) maxLimbDist = player.baseR+g; });
 
     player.bones.forEach(b => {
-        // During the death melt, gems detach from their slot springs and
-        // free-fall with gravity so they spill out and rest on the ground.
-        if (winPhase === 3 && _meltStarted && !b.isFaceItem) {
-            if (!b._meltInit) {
-                b._meltInit = true;
-                // Initial outward + slight upward kick from the body
-                const _a = Math.atan2(b.curY, b.curX || 0.001);
-                const _spd = 1.5 + Math.random() * 2.0;
-                b._mvx = Math.cos(_a) * _spd + (Math.random() - 0.5) * 1.5;
-                b._mvy = Math.sin(_a) * _spd * 0.5 - 1.5 - Math.random() * 1.5;
-                b._mvr = (Math.random() - 0.5) * 0.04;
-                b._meltSettled = false;
-            }
-            if (!b._meltSettled) {
-                b._mvy += 0.42 * dt;          // gravity
-                b._mvx *= Math.pow(0.96, dt); // air drag
-                b.curX += b._mvx * dt;
-                b.curY += b._mvy * dt;
-                b.rot  += b._mvr * dt;
-                if (b.curY > player.baseR * 0.5 && b._mvy > 0) {
-                    b._meltSettled = true;
-                    b._mvx = 0; b._mvy = 0; b._mvr = 0;
-                }
-            }
-            return; // skip the spring update
-        }
-
         const tx = Math.cos(b.relAngle)*b.relDist, ty = Math.sin(b.relAngle)*b.relDist;
         const boneLerp = 1 - Math.pow(1 - 0.45, dt);
         b.curX += (tx - b.curX)*boneLerp - player.vx*vMult*0.2;
@@ -2034,16 +1978,8 @@ function update() {
                         if (_ne3) enemies[idx] = _ne3; else enemies.splice(idx, 1);
 
                         if (health <= 0) {
-                            // Death triggers a 1s freeze where the player still
-                            // appears as the fully-evolved character (same
-                            // pose/items as the moment before dying), then a
-                            // melt animation begins. Goo blobs are deferred
-                            // until the melt actually starts.
                             winPhase = 3;
                             deathTimer = 0;
-                            gooBlobs = [];
-                            _meltStarted = false;
-                            DEATH_DUR = MELT_DELAY + 180; // 1s freeze + 3s melt
                             haptic([60, 30, 100]);
                         }
                     } else {
@@ -2214,45 +2150,9 @@ function update() {
         if (p.life <= 0 || Math.hypot(player.x-p.x,(player.y-15)-p.y) < 15) player.particles.splice(i, 1);
     });
 
-    // Death animation: 1s freeze, then the gems detach and physics-fall out
-    // of the body, plus 3 small flat atmospheric drips peel off.
+    // Death — no animation for now, just brief delay before buttons appear.
     if (winPhase === 3) {
         deathTimer += dt;
-        if (!_meltStarted && deathTimer >= MELT_DELAY) {
-            _meltStarted = true;
-            shakeTime = 14;
-            haptic([35, 15, 60]);
-            gooBlobs = [];
-            for (let i = 0; i < 3; i++) {
-                const a = -Math.PI/2 + (Math.random() - 0.5) * Math.PI;
-                const sp = 3 + Math.random() * 4;
-                gooBlobs.push({
-                    x: player.x + (Math.random() - 0.5) * player.baseR,
-                    y: player.y - 10 + (Math.random() - 0.5) * 20,
-                    vx: Math.cos(a) * sp + (Math.random() - 0.5) * 3,
-                    vy: -3 - Math.random() * 4,
-                    r: 6 + Math.random() * 6,
-                    landed: false,
-                    wobble: Math.random() * Math.PI * 2,
-                    alpha: 0.85
-                });
-            }
-        }
-        const groundY = player.y + player.baseR * 0.55;
-        gooBlobs.forEach(b => {
-            if (!b.landed) {
-                b.vy += 0.45 * dt;
-                b.x += b.vx * dt;
-                b.y += b.vy * dt;
-                b.vx *= Math.pow(0.94, dt);
-                if (b.y >= groundY && b.vy > 0) {
-                    b.landed = true;
-                    b.y = groundY + (Math.random() - 0.5) * 4;
-                    b.vy = 0;
-                }
-            }
-            b.wobble += 0.05 * dt;
-        });
         if (deathTimer >= DEATH_DUR) {
             const overlay = document.getElementById('game-over-overlay');
             if (overlay && !overlay.classList.contains('visible')) {
@@ -2973,19 +2873,14 @@ function draw() {
 
     entityCtx.save();
     entityCtx.clip(bodyPath);
-    // Skip in-body gem rendering once the melt has begun — the gems are
-    // detached and rendered separately (with free physics) outside the clip.
-    const _bonesDetached = winPhase === 3 && _meltStarted;
-    if (!_bonesDetached) {
-        player.bones.forEach(b => {
-            entityCtx.save();
-            entityCtx.translate(player.x+b.curX, player.y+b.curY);
-            entityCtx.rotate(b.rot);
-            entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
-            draw3DItem(entityCtx, b, player.x+b.curX, player.y+b.curY, false, true);
-            entityCtx.restore();
-        });
-    }
+    player.bones.forEach(b => {
+        entityCtx.save();
+        entityCtx.translate(player.x+b.curX, player.y+b.curY);
+        entityCtx.rotate(b.rot);
+        entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
+        draw3DItem(entityCtx, b, player.x+b.curX, player.y+b.curY, false, true);
+        entityCtx.restore();
+    });
     
     // Body fill uses customized player color
     entityCtx.fillStyle = hexToRgba(window.PLAYER_COLOR, 0.85); entityCtx.fill(bodyPath);
@@ -3006,21 +2901,6 @@ function draw() {
         entityCtx.lineWidth = 2.5;
         entityCtx.stroke(bodyPath);
         entityCtx.restore();
-    }
-
-    // Death melt — render the detached gems OUTSIDE the body clip so they
-    // are visible falling/resting around the player. Same gem polygons used
-    // in-game; no special asset.
-    if (winPhase === 3 && _meltStarted) {
-        player.bones.forEach(b => {
-            if (b.isFaceItem) return;
-            entityCtx.save();
-            entityCtx.translate(player.x + b.curX, player.y + b.curY);
-            entityCtx.rotate(b.rot);
-            entityCtx.globalAlpha = Math.min(1, b.scale / (b.originalScale || b.scale));
-            draw3DItem(entityCtx, b, player.x + b.curX, player.y + b.curY, false, false);
-            entityCtx.restore();
-        });
     }
 
     items.forEach(it => {
@@ -3053,20 +2933,7 @@ function draw() {
     entityCtx.restore();
 
     ctx.globalCompositeOperation = 'source-over';
-    // Always composite the entity canvas. During the death melt the player's
-    // squish is already applied inside the entityCtx draw via the transform
-    // wrap. Fade the whole composite at the very end of the melt so the
-    // puddle softly disappears before the controls fade in.
-    let _entA = 1;
-    if (winPhase === 3) {
-        const tail = Math.max(0, deathTimer - (MELT_DELAY + MELT_DUR));
-        _entA = Math.max(0, 1 - tail / 30); // fade over last 0.5s
-    }
-    if (_entA > 0) {
-        ctx.globalAlpha = _entA;
-        ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
-        ctx.globalAlpha = 1;
-    }
+    ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
 
     // Pearl glares drawn on main ctx in screen space — after entityCanvas, so they render on top
     if (winPhase === 0) {
@@ -3129,189 +2996,28 @@ function draw() {
         lightCtx.restore();
     });
 
-    const _lightFade = winPhase === 3 ? Math.max(0, 1 - Math.min(1, Math.max(0, deathTimer - MELT_DELAY) / 70) * 2) : 1;
-    if (_lightFade > 0) {
-        ctx.globalAlpha = _lightFade;
-        ctx.globalCompositeOperation = 'screen';
-        ctx.drawImage(lightCanvas, 0, 0, view.w, view.h);
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(lightCanvas, 0, 0, view.w, view.h);
+    ctx.globalCompositeOperation = 'source-over';
+
+    ctx.save(); // camera
+    ctx.translate(view.w/2, view.h/2);
+    if (shakeTime > 0) ctx.translate(Math.random()*20-10, Math.random()*20-10);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    if (winPhase === 0) {
+        enemies.forEach(en => {
+            drawEnemy(ctx, en);
+            if (huntedTime > 0) {
+                const eH = (en.time * 60) % 360;
+                drawGlareStar(ctx, en.x, en.y, en.r, en.time, eH);
+            }
+        });
     }
 
-    // ── UNIFIED DEATH / NORMAL DRAW ──────────────────────────────────────
-    // Single rendering path. The melt animation is achieved via the
-    // _applyMeltTransform() wrap on the player draws (entityCtx body and
-    // main ctx face), not via a separate death-only branch.
-    if (false) {
-        // dp 0→1 over 300 frames AFTER the freeze; ease-in so melt starts slow then flows fast
-        const dp   = Math.min(1, Math.max(0, deathTimer - MELT_DELAY) / 300);
-        const ease = dp * dp * (3 - 2 * dp); // smoothstep: slow-fast-slow
-
-        ctx.save(); // camera
-        ctx.translate(view.w / 2, view.h / 2);
-        ctx.scale(camera.zoom, camera.zoom);
-        ctx.translate(-camera.x, -camera.y);
-
-        // ── Procedural liquid melt blob ───────────────────────────────────
-        const bR  = player.baseR;
-        const bRy = bR * Math.max(0.055, 1 - ease * 0.945); // height: full → flat
-        const bRx = bR * (1 + ease * 4.5);                  // width:  expands wide
-        const bCx = player.x;
-        // Center sinks as it flattens (bottom stays roughly on same plane)
-        const bCy = player.y + (bR - bRy) * 0.4;
-        const bT  = deathTimer * 0.016;
-
-        // Organic surface wobble — large during melt, tiny ripple once settled
-        const wobMelt   = bR * Math.max(0, 0.13 * (1 - ease * 1.7));
-        const wobRipple = bR * 0.012 * Math.max(0, (ease - 0.7) / 0.3);
-        const wobAmt    = wobMelt + wobRipple;
-
-        const buildBlobPath = () => {
-            ctx.beginPath();
-            for (let i = 0; i <= 72; i++) {
-                const a   = (i / 72) * Math.PI * 2;
-                const wob = wobAmt * (
-                    Math.sin(a * 3 + bT * 9.1) * 0.55 +
-                    Math.sin(a * 5 + bT * 6.4) * 0.30 +
-                    Math.sin(a * 8 + bT * 13.7) * 0.15
-                );
-                const x = bCx + Math.cos(a) * (bRx + wob);
-                const y = bCy + Math.sin(a) * (bRy + wob * 0.2);
-                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-            }
-            ctx.closePath();
-        };
-
-        // Fade in as entity canvas fades out; fade out at the very end
-        const blobA = Math.min(1, Math.max(0, (deathTimer - 15) / 40))
-                    * Math.max(0, 1 - Math.max(0, dp - 0.9) * 10);
-
-        if (blobA > 0.01) {
-            ctx.globalAlpha = blobA;
-
-            // 1. Base colour fill
-            buildBlobPath();
-            ctx.fillStyle = window.PLAYER_COLOR;
-            ctx.fill();
-
-            // 2. Dark depth rim — gives the puddle a liquid edge
-            buildBlobPath();
-            const rimG = ctx.createRadialGradient(bCx, bCy, bRx * 0.5, bCx, bCy, bRx * 1.02);
-            rimG.addColorStop(0,    'rgba(0,0,0,0)');
-            rimG.addColorStop(0.65, 'rgba(0,0,0,0)');
-            rimG.addColorStop(1,    'rgba(0,0,0,0.3)');
-            ctx.fillStyle = rimG;
-            ctx.fill();
-
-            // 3. Specular highlight — top-left sheen like liquid surface
-            buildBlobPath();
-            const hlX = bCx - bRx * 0.18, hlY = bCy - bRy * 0.38;
-            const hlG = ctx.createRadialGradient(hlX, hlY, 0, hlX, hlY, Math.max(bRx, bRy) * 0.55);
-            hlG.addColorStop(0,    'rgba(255,255,255,0.52)');
-            hlG.addColorStop(0.45, 'rgba(255,255,255,0.14)');
-            hlG.addColorStop(1,    'rgba(255,255,255,0)');
-            ctx.fillStyle = hlG;
-            ctx.fill();
-
-            ctx.globalAlpha = 1;
-        }
-
-        // ── Goo droplets splattering from the melt ────────────────────────
-        const blobFade = Math.max(0, 1 - Math.max(0, dp - 0.4) * 2.5);
-        if (blobFade > 0.01) {
-            gooBlobs.forEach(b => {
-                ctx.save();
-                ctx.translate(b.x, b.y);
-                const sqz = b.squeezed;
-                ctx.scale(1 + sqz * 2.5, Math.max(0.1, 1 - sqz * 0.9));
-                ctx.beginPath();
-                for (let i = 0; i <= 28; i++) {
-                    const a   = (i / 28) * Math.PI * 2;
-                    const wob = 1 + Math.sin(a*3 + b.wobble)*0.14 + Math.cos(a*5 + b.wobble*0.7)*0.09;
-                    const r   = b.r * wob;
-                    i === 0 ? ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r) : ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
-                }
-                ctx.closePath();
-                ctx.fillStyle = window.PLAYER_COLOR;
-                ctx.globalAlpha = b.alpha * blobFade;
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(-b.r*0.22, -b.r*0.22, b.r*0.32, 0, Math.PI*2);
-                ctx.fillStyle = 'rgba(255,255,255,0.26)';
-                ctx.fill();
-                ctx.globalAlpha = 1;
-                ctx.restore();
-            });
-        }
-
-        // ── X eyes flash at moment of death ──────────────────────────────
-        const fs2     = 1.1 + coveragePercent / 150;
-        const eyeSpc2 = 40 * fs2, eyeY2 = -20 * fs2, eyeR2 = 36 * fs2;
-        const xEyeA   = Math.max(0, Math.min(1, dp * 9) * Math.max(0, 1 - dp * 4));
-        if (xEyeA > 0.02) {
-            ctx.save();
-            ctx.translate(player.x, player.y - 15);
-            ctx.globalAlpha = xEyeA;
-            [-1, 1].forEach(side => {
-                ctx.save();
-                ctx.translate(side * eyeSpc2, eyeY2);
-                ctx.strokeStyle = '#1a1a1a';
-                ctx.lineWidth = 7 * fs2;
-                ctx.lineCap = 'round';
-                ctx.beginPath(); ctx.moveTo(-eyeR2*0.58, -eyeR2*0.58); ctx.lineTo(eyeR2*0.58, eyeR2*0.58); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(eyeR2*0.58, -eyeR2*0.58); ctx.lineTo(-eyeR2*0.58, eyeR2*0.58); ctx.stroke();
-                ctx.restore();
-            });
-            ctx.globalAlpha = 1;
-            ctx.restore();
-        }
-
-        ctx.restore(); // camera
-
-    } else {
-        // ── NORMAL GAMEPLAY DRAW ─────────────────────────────────────────
-        ctx.save(); // camera
-        ctx.translate(view.w/2, view.h/2);
-        if (shakeTime > 0) ctx.translate(Math.random()*20-10, Math.random()*20-10);
-        ctx.scale(camera.zoom, camera.zoom);
-        ctx.translate(-camera.x, -camera.y);
-
-        if (winPhase === 0) {
-            enemies.forEach(en => {
-                drawEnemy(ctx, en);
-                if (huntedTime > 0) {
-                    const eH = (en.time * 60) % 360;
-                    drawGlareStar(ctx, en.x, en.y, en.r, en.time, eH);
-                }
-            });
-        }
-
-
-        // Flat atmospheric drips (matching player color, no gradient/specular)
-        if (winPhase === 3 && _meltStarted && gooBlobs.length > 0) {
-            ctx.save();
-            ctx.fillStyle = window.PLAYER_COLOR;
-            gooBlobs.forEach(b => {
-                ctx.beginPath();
-                const M = 16;
-                for (let i = 0; i < M; i++) {
-                    const a = (i / M) * Math.PI * 2;
-                    const wob = 1 + Math.sin(a*3 + b.wobble) * 0.1;
-                    const r = b.r * wob;
-                    const px = b.x + Math.cos(a) * r;
-                    const py = b.y + Math.sin(a) * r * (b.landed ? 0.45 : 1);
-                    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-                ctx.globalAlpha = b.alpha;
-                ctx.fill();
-            });
-            ctx.globalAlpha = 1;
-            ctx.restore();
-        }
-
-        ctx.save();
-        ctx.translate(player.x, player.y-15);
+    ctx.save();
+    ctx.translate(player.x, player.y-15);
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
@@ -3624,8 +3330,7 @@ function draw() {
             ctx.globalAlpha = 1;
         }
 
-        ctx.restore(); // camera
-    } // end death / normal branch
+    ctx.restore(); // camera
 
 
     if (flashAlpha > 0) {
