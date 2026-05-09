@@ -829,11 +829,15 @@ const entityCanvas = document.createElement('canvas');
 const entityCtx    = entityCanvas.getContext('2d');
 const lightCanvas  = document.createElement('canvas');
 const lightCtx     = lightCanvas.getContext('2d');
+// Death melt: balls drawn here with blur, then composited to main with
+// contrast filter to produce a metaball-style merged silhouette.
+const meltCanvas   = document.createElement('canvas');
+const meltCtx      = meltCanvas.getContext('2d');
 
 // High-quality bilinear smoothing on every game context so face PNGs and
 // the supersampled gem cache scale cleanly instead of pixelating. Only
 // affects interpolation — no size or position changes.
-[ctx, entityCtx, lightCtx].forEach(c => {
+[ctx, entityCtx, lightCtx, meltCtx].forEach(c => {
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
 });
@@ -848,13 +852,13 @@ function resizeCanvas() {
     const dpr = window.devicePixelRatio || 1;
     view.w = window.innerWidth;
     view.h = window.innerHeight;
-    canvas.width = entityCanvas.width = lightCanvas.width = Math.round(view.w * dpr);
-    canvas.height = entityCanvas.height = lightCanvas.height = Math.round(view.h * dpr);
+    canvas.width = entityCanvas.width = lightCanvas.width = meltCanvas.width = Math.round(view.w * dpr);
+    canvas.height = entityCanvas.height = lightCanvas.height = meltCanvas.height = Math.round(view.h * dpr);
     canvas.style.width = view.w + 'px';
     canvas.style.height = view.h + 'px';
     // Re-apply smoothing + DPR transform — canvas.width assignment resets
     // both, so they must be set after every resize.
-    [ctx, entityCtx, lightCtx].forEach(c => {
+    [ctx, entityCtx, lightCtx, meltCtx].forEach(c => {
         c.setTransform(dpr, 0, 0, dpr, 0, 0);
         c.imageSmoothingEnabled = true;
         c.imageSmoothingQuality = 'high';
@@ -898,7 +902,69 @@ const pearlIntro = {
 let bombSparks = [];
 let hitSplashes = [];
 let deathTimer = 0;
-const DEATH_DUR = 60;            // brief pause after death before controls appear
+const DEATH_FREEZE   = 30;       // 0.5s freeze before melt starts
+const DEATH_MELT_DUR = 180;      // 3s melt + settle
+const DEATH_TAIL     = 30;       // 0.5s settled puddle before controls fade in
+const DEATH_DUR      = DEATH_FREEZE + DEATH_MELT_DUR + DEATH_TAIL;
+let deathBalls = [];
+let _deathBallsInit = false;
+
+function _spawnDeathMeltBalls() {
+    deathBalls = [];
+    // Big core ball — represents the body
+    deathBalls.push({
+        x: player.x, y: player.y - 8,
+        r: player.baseR * 0.85,
+        vx: 0, vy: -0.8,
+        flatten: 0
+    });
+    // Outer ring of smaller spheres bursting outward and sagging down
+    const N = 14;
+    for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 + Math.random() * 0.4;
+        const d = player.baseR * (0.25 + Math.random() * 0.5);
+        const speed = 1.4 + Math.random() * 2.0;
+        deathBalls.push({
+            x: player.x + Math.cos(a) * d,
+            y: player.y + Math.sin(a) * d * 0.5,
+            r: player.baseR * (0.20 + Math.random() * 0.25),
+            vx: Math.cos(a) * speed,
+            vy: Math.sin(a) * speed * 0.4 - 1.0 - Math.random() * 1.4,
+            flatten: 0
+        });
+    }
+}
+
+// Player visibility during the death sequence: full during freeze, then
+// fades to 0 quickly as the metaball melt takes over.
+function _playerDeathFade() {
+    if (winPhase !== 3) return 1;
+    return Math.max(0, 1 - Math.max(0, deathTimer - DEATH_FREEZE) / 8);
+}
+
+function _tickDeathMelt(dt) {
+    if (winPhase !== 3) return;
+    if (deathTimer < DEATH_FREEZE) return;
+    if (!_deathBallsInit) {
+        _spawnDeathMeltBalls();
+        _deathBallsInit = true;
+    }
+    const groundY = player.y + player.baseR * 0.55;
+    deathBalls.forEach(b => {
+        b.vy += 0.32 * dt;
+        b.vx *= Math.pow(0.95, dt);
+        b.x  += b.vx * dt;
+        b.y  += b.vy * dt;
+        if (b.y > groundY) {
+            b.y = groundY;
+            if (b.vy > 0) b.vy *= -0.22;
+            b.vx *= 0.78;
+            if (Math.abs(b.vy) < 0.4) {
+                b.flatten = Math.min(1, b.flatten + 0.012 * dt);
+            }
+        }
+    });
+}
 
 function spawnHitSplash(x, y) {
     // 1. Flash
@@ -1980,6 +2046,8 @@ function update() {
                         if (health <= 0) {
                             winPhase = 3;
                             deathTimer = 0;
+                            _deathBallsInit = false;
+                            deathBalls = [];
                             haptic([60, 30, 100]);
                         }
                     } else {
@@ -2150,9 +2218,10 @@ function update() {
         if (p.life <= 0 || Math.hypot(player.x-p.x,(player.y-15)-p.y) < 15) player.particles.splice(i, 1);
     });
 
-    // Death — no animation for now, just brief delay before buttons appear.
+    // Death — freeze, then metaball melt, then show retry/back controls.
     if (winPhase === 3) {
         deathTimer += dt;
+        _tickDeathMelt(dt);
         if (deathTimer >= DEATH_DUR) {
             const overlay = document.getElementById('game-over-overlay');
             if (overlay && !overlay.classList.contains('visible')) {
@@ -2933,7 +3002,12 @@ function draw() {
     entityCtx.restore();
 
     ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
+    const _pFade = _playerDeathFade();
+    if (_pFade > 0) {
+        ctx.globalAlpha = _pFade;
+        ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
+        ctx.globalAlpha = 1;
+    }
 
     // Pearl glares drawn on main ctx in screen space — after entityCanvas, so they render on top
     if (winPhase === 0) {
@@ -3000,6 +3074,46 @@ function draw() {
     ctx.drawImage(lightCanvas, 0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
 
+    // Death melt — metaball spheres. Soft circles with blur are accumulated
+    // on meltCanvas, then composited to main with a contrast filter so the
+    // smooth alpha overlap snaps into a hard merged silhouette. Flat fill,
+    // no gradient/specular.
+    if (winPhase === 3 && deathTimer >= DEATH_FREEZE && deathBalls.length > 0) {
+        const meltA = Math.min(1, (deathTimer - DEATH_FREEZE) / 6)
+                    * Math.max(0, 1 - Math.max(0, deathTimer - (DEATH_DUR - 25)) / 25);
+        if (meltA > 0) {
+            const dpr = window.devicePixelRatio || 1;
+            meltCtx.save();
+            meltCtx.setTransform(1, 0, 0, 1, 0, 0);
+            meltCtx.clearRect(0, 0, meltCanvas.width, meltCanvas.height);
+            meltCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            meltCtx.translate(view.w / 2, view.h / 2);
+            meltCtx.scale(camera.zoom, camera.zoom);
+            meltCtx.translate(-camera.x, -camera.y);
+            meltCtx.filter = 'blur(14px)';
+            meltCtx.fillStyle = window.PLAYER_COLOR;
+            deathBalls.forEach(b => {
+                meltCtx.save();
+                meltCtx.translate(b.x, b.y);
+                meltCtx.scale(1 + b.flatten * 0.7, 1 - b.flatten * 0.6);
+                meltCtx.beginPath();
+                meltCtx.arc(0, 0, b.r, 0, Math.PI * 2);
+                meltCtx.fill();
+                meltCtx.restore();
+            });
+            meltCtx.filter = 'none';
+            meltCtx.restore();
+
+            ctx.save();
+            ctx.globalAlpha = meltA;
+            ctx.filter = 'contrast(15)';
+            ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
+            ctx.filter = 'none';
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+    }
+
     ctx.save(); // camera
     ctx.translate(view.w/2, view.h/2);
     if (shakeTime > 0) ctx.translate(Math.random()*20-10, Math.random()*20-10);
@@ -3018,6 +3132,7 @@ function draw() {
 
     ctx.save();
     ctx.translate(player.x, player.y-15);
+    ctx.globalAlpha = _playerDeathFade();
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
