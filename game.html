@@ -908,19 +908,73 @@ const DEATH_TAIL     = 30;       // 0.5s tail before controls show
 const DEATH_DUR      = DEATH_FREEZE + DEATH_MELT_DUR + DEATH_TAIL;
 let deathBalls = [];
 let _deathBallsInit = false;
+// The actual ray-marched body silhouette (~150 world-space points) cached
+// each frame from draw() so death-spawn can sample blob origins from the
+// real character outline instead of a generic disc.
+let _lastBodyPts = null;
 
-// Sample ~55 blobs uniformly across the player's body + one bigger drop
-// per gem so the items visibly become spheres too. Each blob bursts
+function _pointInPoly(px, py, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        const xi = poly[i].x, yi = poly[i].y;
+        const xj = poly[j].x, yj = poly[j].y;
+        if (((yi > py) !== (yj > py)) &&
+            (px < (xj - xi) * (py - yi) / (yj - yi) + xi)) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+function _sampleInPoly(poly, count) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of poly) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    }
+    const out = [];
+    for (let n = 0; n < count; n++) {
+        let pt = null;
+        for (let tries = 0; tries < 30; tries++) {
+            const x = minX + Math.random() * (maxX - minX);
+            const y = minY + Math.random() * (maxY - minY);
+            if (_pointInPoly(x, y, poly)) { pt = { x, y }; break; }
+        }
+        if (!pt) {
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            pt = { x: cx + (Math.random() - 0.5) * 20, y: cy + (Math.random() - 0.5) * 20 };
+        }
+        out.push(pt);
+    }
+    return out;
+}
+
+// Sample ~55 blobs from inside the actual ray-marched body silhouette
+// (so the spheres trace the character's real shape — limbs, gem
+// extensions, animated wobble, all of it) plus one bigger drop per gem
+// so the items visibly become spheres too. Each blob bursts radially
 // outward from its sample point.
 function _spawnDeathMeltBalls() {
     deathBalls = [];
-    const baseR = player.baseR;
     const N = 55;
+    const poly = (_lastBodyPts && _lastBodyPts.length > 4) ? _lastBodyPts : null;
+    const samples = poly
+        ? _sampleInPoly(poly, N)
+        : null;
     for (let i = 0; i < N; i++) {
-        const a  = Math.random() * Math.PI * 2;
-        const rr = Math.sqrt(Math.random()) * baseR * 1.05;
-        const sx = player.x + Math.cos(a) * rr;
-        const sy = player.y - 8 + Math.sin(a) * rr * 0.85;
+        let sx, sy;
+        if (samples) {
+            sx = samples[i].x;
+            sy = samples[i].y;
+        } else {
+            const a  = Math.random() * Math.PI * 2;
+            const rr = Math.sqrt(Math.random()) * player.baseR * 1.05;
+            sx = player.x + Math.cos(a) * rr;
+            sy = player.y - 8 + Math.sin(a) * rr * 0.85;
+        }
         const vAng = Math.atan2(sy - player.y, sx - player.x);
         const vSpd = 4 + Math.random() * 14;
         deathBalls.push({
@@ -2863,6 +2917,7 @@ function draw() {
     const bodyPath = new Path2D();
     pts.forEach((pt, i) => { if (i===0) bodyPath.moveTo(pt.x,pt.y); else bodyPath.lineTo(pt.x,pt.y); });
     bodyPath.closePath();
+    _lastBodyPts = pts;
 
     if (player.history.length > 2) {
         entityCtx.beginPath();
