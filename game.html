@@ -902,44 +902,61 @@ const pearlIntro = {
 let bombSparks = [];
 let hitSplashes = [];
 let deathTimer = 0;
-const DEATH_FREEZE   = 30;       // 0.5s freeze before melt starts
-const DEATH_MELT_DUR = 180;      // 3s melt + settle
-const DEATH_TAIL     = 30;       // 0.5s settled puddle before controls fade in
+const DEATH_FREEZE   = 60;       // 1s freeze — character keeps full shape
+const DEATH_MELT_DUR = 180;      // 3s sphere physics + settle
+const DEATH_TAIL     = 30;       // 0.5s tail before controls show
 const DEATH_DUR      = DEATH_FREEZE + DEATH_MELT_DUR + DEATH_TAIL;
 let deathBalls = [];
 let _deathBallsInit = false;
 
+// Sample ~55 blobs uniformly across the player's body + one bigger drop
+// per gem so the items visibly become spheres too. Each blob bursts
+// outward from its sample point.
 function _spawnDeathMeltBalls() {
     deathBalls = [];
-    // Big core ball — represents the body
-    deathBalls.push({
-        x: player.x, y: player.y - 8,
-        r: player.baseR * 0.85,
-        vx: 0, vy: -0.8,
-        flatten: 0
-    });
-    // Outer ring of smaller spheres bursting outward and sagging down
-    const N = 14;
+    const baseR = player.baseR;
+    const N = 55;
     for (let i = 0; i < N; i++) {
-        const a = (i / N) * Math.PI * 2 + Math.random() * 0.4;
-        const d = player.baseR * (0.25 + Math.random() * 0.5);
-        const speed = 1.4 + Math.random() * 2.0;
+        const a  = Math.random() * Math.PI * 2;
+        const rr = Math.sqrt(Math.random()) * baseR * 1.05;
+        const sx = player.x + Math.cos(a) * rr;
+        const sy = player.y - 8 + Math.sin(a) * rr * 0.85;
+        const vAng = Math.atan2(sy - player.y, sx - player.x);
+        const vSpd = 4 + Math.random() * 14;
         deathBalls.push({
-            x: player.x + Math.cos(a) * d,
-            y: player.y + Math.sin(a) * d * 0.5,
-            r: player.baseR * (0.20 + Math.random() * 0.25),
-            vx: Math.cos(a) * speed,
-            vy: Math.sin(a) * speed * 0.4 - 1.0 - Math.random() * 1.4,
-            flatten: 0
+            x: sx, y: sy,
+            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 3,
+            vy: Math.sin(vAng) * vSpd * 0.55 - 5 - Math.random() * 9,
+            r: 7 + Math.random() * 18,
+            landed: false,
+            canBounce: Math.random() < 0.35,
+            squeezed: 0,
         });
     }
+    // Per-gem big drops
+    player.bones.forEach(b => {
+        if (b.isFaceItem) return;
+        const gx = player.x + b.curX;
+        const gy = player.y + b.curY;
+        const vAng = Math.atan2(gy - player.y, gx - player.x);
+        const vSpd = 5 + Math.random() * 7;
+        deathBalls.push({
+            x: gx, y: gy,
+            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 3,
+            vy: Math.sin(vAng) * vSpd * 0.5 - 7 - Math.random() * 5,
+            r: 14 + (b.scale || 1) * 3,
+            landed: false,
+            canBounce: true,
+            squeezed: 0,
+        });
+    });
 }
 
-// Player visibility during the death sequence: full during freeze, then
-// fades to 0 quickly as the metaball melt takes over.
+// Player visibility: full during freeze, hard-cut to 0 the instant the
+// burst happens (so the character "explodes" rather than fades).
 function _playerDeathFade() {
     if (winPhase !== 3) return 1;
-    return Math.max(0, 1 - Math.max(0, deathTimer - DEATH_FREEZE) / 8);
+    return deathTimer < DEATH_FREEZE ? 1 : 0;
 }
 
 function _tickDeathMelt(dt) {
@@ -948,20 +965,31 @@ function _tickDeathMelt(dt) {
     if (!_deathBallsInit) {
         _spawnDeathMeltBalls();
         _deathBallsInit = true;
+        shakeTime = 32;
+        flashAlpha = 0.9;
+        haptic([40, 18, 90]);
     }
-    const groundY = player.y + player.baseR * 0.55;
+    const groundY = player.y + 38;
     deathBalls.forEach(b => {
-        b.vy += 0.32 * dt;
-        b.vx *= Math.pow(0.95, dt);
-        b.x  += b.vx * dt;
-        b.y  += b.vy * dt;
-        if (b.y > groundY) {
-            b.y = groundY;
-            if (b.vy > 0) b.vy *= -0.22;
-            b.vx *= 0.78;
-            if (Math.abs(b.vy) < 0.4) {
-                b.flatten = Math.min(1, b.flatten + 0.012 * dt);
+        if (!b.landed) {
+            b.vy += 0.7 * dt;
+            b.x  += b.vx * dt;
+            b.y  += b.vy * dt;
+            b.vx *= Math.pow(0.94, dt);
+            if (b.y >= groundY && b.vy > 0) {
+                if (b.canBounce && Math.abs(b.vy) > 5) {
+                    b.vy = -b.vy * 0.35;
+                    b.vx *= 0.55;
+                    b.canBounce = false;
+                    b.y = groundY;
+                } else {
+                    b.landed = true;
+                    b.y = groundY + (Math.random() - 0.5) * 4;
+                    b.vy = 0;
+                }
             }
+        } else {
+            b.squeezed = Math.min(1, b.squeezed + 0.06 * dt);
         }
     });
 }
@@ -3074,51 +3102,6 @@ function draw() {
     ctx.drawImage(lightCanvas, 0, 0, view.w, view.h);
     ctx.globalCompositeOperation = 'source-over';
 
-    // Death melt — metaball spheres. Solid filled circles drawn on
-    // meltCanvas, then composited to main with a single blur+contrast
-    // filter chain. The blur softens edges into a smooth alpha field; the
-    // contrast threshold snaps that field into a hard merged silhouette.
-    // This is the canonical CSS-metaball technique. Flat fill, no shading.
-    if (winPhase === 3 && deathTimer >= DEATH_FREEZE && deathBalls.length > 0) {
-        const meltA = Math.min(1, (deathTimer - DEATH_FREEZE) / 6)
-                    * Math.max(0, 1 - Math.max(0, deathTimer - (DEATH_DUR - 25)) / 25);
-        if (meltA > 0) {
-            const dpr = window.devicePixelRatio || 1;
-            // Pass 1 — solid balls on offscreen, no per-ball filter
-            meltCtx.save();
-            meltCtx.setTransform(1, 0, 0, 1, 0, 0);
-            meltCtx.clearRect(0, 0, meltCanvas.width, meltCanvas.height);
-            meltCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            meltCtx.translate(view.w / 2, view.h / 2);
-            meltCtx.scale(camera.zoom, camera.zoom);
-            meltCtx.translate(-camera.x, -camera.y);
-            meltCtx.fillStyle = window.PLAYER_COLOR;
-            deathBalls.forEach(b => {
-                meltCtx.save();
-                meltCtx.translate(b.x, b.y);
-                meltCtx.scale(1 + b.flatten * 0.7, 1 - b.flatten * 0.6);
-                meltCtx.beginPath();
-                meltCtx.arc(0, 0, b.r, 0, Math.PI * 2);
-                meltCtx.fill();
-                meltCtx.restore();
-            });
-            meltCtx.restore();
-
-            // Pass 2 — composite with combined blur+contrast filter chain.
-            // Also draw the raw meltCanvas underneath as a fallback so the
-            // spheres are visible even if filter isn't supported / doesn't
-            // threshold alpha in this browser.
-            ctx.save();
-            ctx.globalAlpha = meltA;
-            ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
-            ctx.filter = 'blur(12px) contrast(20)';
-            ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
-            ctx.filter = 'none';
-            ctx.globalAlpha = 1;
-            ctx.restore();
-        }
-    }
-
     ctx.save(); // camera
     ctx.translate(view.w/2, view.h/2);
     if (shakeTime > 0) ctx.translate(Math.random()*20-10, Math.random()*20-10);
@@ -3133,6 +3116,33 @@ function draw() {
                 drawGlareStar(ctx, en.x, en.y, en.r, en.time, eH);
             }
         });
+    }
+
+    // Death explosion — flat plain spheres in player color. No metaball
+    // filter, no gradient, no specular. Drawn in world space (inside the
+    // camera transform). Sorted so airborne balls render above landed.
+    if (winPhase === 3 && deathTimer >= DEATH_FREEZE && deathBalls.length > 0) {
+        const fadeOut = Math.max(0, 1 - Math.max(0, deathTimer - (DEATH_DUR - 25)) / 25);
+        if (fadeOut > 0) {
+            const _sorted = deathBalls.slice().sort((a, b) =>
+                a.landed === b.landed ? a.y - b.y : (a.landed ? -1 : 1));
+            ctx.save();
+            ctx.fillStyle = window.PLAYER_COLOR;
+            ctx.globalAlpha = fadeOut;
+            _sorted.forEach(b => {
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                const sx = 1 + b.squeezed * 1.5;
+                const sy = Math.max(0.18, 1 - b.squeezed * 0.7);
+                ctx.scale(sx, sy);
+                ctx.beginPath();
+                ctx.arc(0, 0, b.r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
     }
 
     ctx.save();
