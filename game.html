@@ -908,6 +908,7 @@ const DEATH_TAIL     = 30;       // 0.5s tail before controls show
 const DEATH_DUR      = DEATH_FREEZE + DEATH_MELT_DUR + DEATH_TAIL;
 let deathBalls = [];
 let _deathBallsInit = false;
+let _deathGroundY = 0;
 // The actual ray-marched body silhouette (~150 world-space points) cached
 // each frame from draw() so death-spawn can sample blob origins from the
 // real character outline instead of a generic disc.
@@ -961,6 +962,16 @@ function _spawnDeathMeltBalls() {
     deathBalls = [];
     const N = 55;
     const poly = (_lastBodyPts && _lastBodyPts.length > 4) ? _lastBodyPts : null;
+    // Ground = just below the silhouette's lowest point so the puddle
+    // forms beneath the character's actual bottom edge (limbs/gems
+    // hanging down included), not at a hardcoded offset.
+    if (poly) {
+        let maxY = -Infinity;
+        for (const p of poly) if (p.y > maxY) maxY = p.y;
+        _deathGroundY = maxY + 18;
+    } else {
+        _deathGroundY = player.y + player.baseR + 18;
+    }
     const samples = poly
         ? _sampleInPoly(poly, N)
         : null;
@@ -1023,7 +1034,7 @@ function _tickDeathMelt(dt) {
         flashAlpha = 0.9;
         haptic([40, 18, 90]);
     }
-    const groundY = player.y + 38;
+    const groundY = _deathGroundY;
     deathBalls.forEach(b => {
         if (!b.landed) {
             b.vy += 0.7 * dt;
