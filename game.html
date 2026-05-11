@@ -3184,28 +3184,48 @@ function draw() {
         });
     }
 
-    // Death explosion — flat plain spheres in player color. No metaball
-    // filter, no gradient, no specular. Drawn in world space (inside the
-    // camera transform). Sorted so airborne balls render above landed.
+    // Death explosion — spheres rendered to offscreen with camera applied,
+    // then composited to main with a combined blur+contrast filter chain.
+    // The blur softens edges into a smooth alpha field; contrast snaps
+    // that field into hard merged silhouettes — the canonical CSS
+    // metaball trick. Flat fill in player color, no gradient/specular.
     if (winPhase === 3 && deathTimer >= DEATH_FREEZE && deathBalls.length > 0) {
         const fadeOut = Math.max(0, 1 - Math.max(0, deathTimer - (DEATH_DUR - 25)) / 25);
         if (fadeOut > 0) {
+            const dpr = window.devicePixelRatio || 1;
             const _sorted = deathBalls.slice().sort((a, b) =>
                 a.landed === b.landed ? a.y - b.y : (a.landed ? -1 : 1));
-            ctx.save();
-            ctx.fillStyle = window.PLAYER_COLOR;
-            ctx.globalAlpha = fadeOut;
+
+            // Pass 1 — solid balls on meltCanvas, camera-matched
+            meltCtx.save();
+            meltCtx.setTransform(1, 0, 0, 1, 0, 0);
+            meltCtx.clearRect(0, 0, meltCanvas.width, meltCanvas.height);
+            meltCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            meltCtx.translate(view.w / 2, view.h / 2);
+            meltCtx.scale(camera.zoom, camera.zoom);
+            meltCtx.translate(-camera.x, -camera.y);
+            meltCtx.fillStyle = window.PLAYER_COLOR;
             _sorted.forEach(b => {
-                ctx.save();
-                ctx.translate(b.x, b.y);
+                meltCtx.save();
+                meltCtx.translate(b.x, b.y);
                 const sx = 1 + b.squeezed * 1.5;
                 const sy = Math.max(0.18, 1 - b.squeezed * 0.7);
-                ctx.scale(sx, sy);
-                ctx.beginPath();
-                ctx.arc(0, 0, b.r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+                meltCtx.scale(sx, sy);
+                meltCtx.beginPath();
+                meltCtx.arc(0, 0, b.r, 0, Math.PI * 2);
+                meltCtx.fill();
+                meltCtx.restore();
             });
+            meltCtx.restore();
+
+            // Pass 2 — composite to ctx in screen space with blur+contrast
+            // filter chain so overlapping balls merge into one silhouette.
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.globalAlpha = fadeOut;
+            ctx.filter = 'blur(12px) contrast(20)';
+            ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
+            ctx.filter = 'none';
             ctx.globalAlpha = 1;
             ctx.restore();
         }
