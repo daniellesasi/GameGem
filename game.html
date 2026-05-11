@@ -1020,24 +1020,23 @@ function _spawnDeathMeltBalls() {
             sy = player.y - 8 + Math.sin(a) * rr * 0.85;
         }
         const vAng = Math.atan2(sy - player.y, sx - player.x);
-        // ~25% of balls get a much higher burst speed so they splash
-        // outward like liquid spray; the rest are slower and settle close.
-        // All velocities scale with the character size so a bigger
-        // silhouette splashes further.
-        const splashy = Math.random() < 0.25;
+        // Subtle, liquid-like burst — gravity does most of the work.
+        // A small minority of balls splash slightly further outward;
+        // the rest barely move sideways and mostly just fall.
+        const splashy = Math.random() < 0.18;
         const vSpd = (splashy
-            ? 14 + Math.random() * 22
-            : 2 + Math.random() * 7) * sizeScale;
+            ? 3 + Math.random() * 5
+            : 0.4 + Math.random() * 2) * sizeScale;
         const vKickY = (splashy
-            ? 9 + Math.random() * 14
-            : 2 + Math.random() * 5) * sizeScale;
+            ? 3 + Math.random() * 4
+            : 0.8 + Math.random() * 2) * sizeScale;
         deathBalls.push({
             x: sx, y: sy,
-            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 5 * sizeScale,
-            vy: Math.sin(vAng) * vSpd * 0.55 - vKickY,
+            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 1.2 * sizeScale,
+            vy: Math.sin(vAng) * vSpd * 0.5 - vKickY,
             r: 24 + Math.random() * 56,
             landed: false,
-            canBounce: Math.random() < 0.6,
+            canBounce: Math.random() < 0.25,
             squeezed: 0,
         });
     }
@@ -1085,9 +1084,9 @@ function _tickDeathMelt(dt) {
             b.y  += b.vy * dt;
             b.vx *= Math.pow(0.94, dt);
             if (b.y >= groundY && b.vy > 0) {
-                if (b.canBounce && Math.abs(b.vy) > 5) {
-                    b.vy = -b.vy * 0.35;
-                    b.vx *= 0.55;
+                if (b.canBounce && Math.abs(b.vy) > 4) {
+                    b.vy = -b.vy * 0.18;
+                    b.vx *= 0.5;
                     b.canBounce = false;
                     b.y = groundY;
                 } else {
