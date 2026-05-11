@@ -978,7 +978,7 @@ function _sampleInPoly(poly, count) {
 // outward from its sample point.
 function _spawnDeathMeltBalls() {
     deathBalls = [];
-    const N = 960;
+    const N = 1920;
     const poly = (_lastBodyPts && _lastBodyPts.length > 4) ? _lastBodyPts : null;
     // Ground = just below the silhouette's lowest point so the puddle
     // forms beneath the character's actual bottom edge (limbs/gems
@@ -1005,14 +1005,22 @@ function _spawnDeathMeltBalls() {
             sy = player.y - 8 + Math.sin(a) * rr * 0.85;
         }
         const vAng = Math.atan2(sy - player.y, sx - player.x);
-        const vSpd = 3 + Math.random() * 10;
+        // ~25% of balls get a much higher burst speed so they splash
+        // outward like liquid spray; the rest are slower and settle close.
+        const splashy = Math.random() < 0.25;
+        const vSpd = splashy
+            ? 10 + Math.random() * 16
+            : 2 + Math.random() * 7;
+        const vKickY = splashy
+            ? 6 + Math.random() * 10
+            : 2 + Math.random() * 5;
         deathBalls.push({
             x: sx, y: sy,
-            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 3,
-            vy: Math.sin(vAng) * vSpd * 0.55 - 4 - Math.random() * 7,
+            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 5,
+            vy: Math.sin(vAng) * vSpd * 0.55 - vKickY,
             r: 24 + Math.random() * 56,
             landed: false,
-            canBounce: Math.random() < 0.35,
+            canBounce: Math.random() < 0.6,
             squeezed: 0,
         });
     }
