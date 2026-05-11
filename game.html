@@ -3323,7 +3323,7 @@ function draw() {
         }
 
         // ── PNG mouth ────────────────────────────────────────────────────
-        {
+        if (winPhase !== 3) {
             const lt = window.PLAYER_LIP_TYPE;
             const m  = player.anim.mouth; // 0=closed → 1=open
 
