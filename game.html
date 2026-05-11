@@ -945,6 +945,14 @@ function _pointInPoly(px, py, poly) {
     return inside;
 }
 
+function _polyArea(poly) {
+    let area = 0;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+        area += (poly[j].x + poly[i].x) * (poly[j].y - poly[i].y);
+    }
+    return Math.abs(area) * 0.5;
+}
+
 function _sampleInPoly(poly, count) {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const p of poly) {
@@ -978,7 +986,6 @@ function _sampleInPoly(poly, count) {
 // outward from its sample point.
 function _spawnDeathMeltBalls() {
     deathBalls = [];
-    const N = 1920;
     const poly = (_lastBodyPts && _lastBodyPts.length > 4) ? _lastBodyPts : null;
     // Ground = just below the silhouette's lowest point so the puddle
     // forms beneath the character's actual bottom edge (limbs/gems
@@ -990,6 +997,14 @@ function _spawnDeathMeltBalls() {
     } else {
         _deathGroundY = player.y + player.baseR + 18;
     }
+    // Match ball count + splash radius to the actual character shape.
+    // baseRef ~= radius of a circle with the same area as the silhouette,
+    // so a character with lots of gems / limbs spawns more balls and
+    // their splash spreads proportionally further.
+    const refArea = Math.PI * 80 * 80;          // ~20100 (reference baseR=80)
+    const polyArea = poly ? _polyArea(poly) : refArea;
+    const N = Math.max(600, Math.min(3500, Math.round(polyArea * 0.09)));
+    const sizeScale = Math.sqrt(polyArea / refArea);
     const samples = poly
         ? _sampleInPoly(poly, N)
         : null;
@@ -1007,16 +1022,18 @@ function _spawnDeathMeltBalls() {
         const vAng = Math.atan2(sy - player.y, sx - player.x);
         // ~25% of balls get a much higher burst speed so they splash
         // outward like liquid spray; the rest are slower and settle close.
+        // All velocities scale with the character size so a bigger
+        // silhouette splashes further.
         const splashy = Math.random() < 0.25;
-        const vSpd = splashy
-            ? 10 + Math.random() * 16
-            : 2 + Math.random() * 7;
-        const vKickY = splashy
-            ? 6 + Math.random() * 10
-            : 2 + Math.random() * 5;
+        const vSpd = (splashy
+            ? 14 + Math.random() * 22
+            : 2 + Math.random() * 7) * sizeScale;
+        const vKickY = (splashy
+            ? 9 + Math.random() * 14
+            : 2 + Math.random() * 5) * sizeScale;
         deathBalls.push({
             x: sx, y: sy,
-            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 5,
+            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 5 * sizeScale,
             vy: Math.sin(vAng) * vSpd * 0.55 - vKickY,
             r: 24 + Math.random() * 56,
             landed: false,
