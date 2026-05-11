@@ -513,6 +513,24 @@
     </style>
 </head>
 <body>
+    <!-- SVG goo filter for the death-melt metaball composite. The blur
+         softens each ball's edge into a smooth alpha field; the
+         feColorMatrix multiplies alpha by 18 and subtracts 7, which
+         threshold-cuts the smooth field into a hard merged silhouette.
+         Unlike the canvas2D contrast() filter, feColorMatrix reliably
+         operates on the alpha channel across browsers. -->
+    <svg aria-hidden="true" style="position:absolute;width:0;height:0;pointer-events:none">
+        <defs>
+            <filter id="deathGoo" x="-10%" y="-10%" width="120%" height="120%">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+                <feColorMatrix in="blur" type="matrix" values="
+                    1 0 0 0 0
+                    0 1 0 0 0
+                    0 0 1 0 0
+                    0 0 0 18 -7" />
+            </filter>
+        </defs>
+    </svg>
     <div id="score-container" style="display:none"><span id="scoreVal">0</span>%</div>
     <div id="eaten-container" style="display:none">ENEMIES EATEN: <span id="eatenVal">0</span></div>
 
@@ -3218,12 +3236,15 @@ function draw() {
             });
             meltCtx.restore();
 
-            // Pass 2 — composite to ctx in screen space with blur+contrast
-            // filter chain so overlapping balls merge into one silhouette.
+            // Pass 2 — composite to ctx in screen space through the SVG
+            // goo filter. feColorMatrix threshold-cuts alpha reliably
+            // across browsers (canvas2D contrast() typically only
+            // affects RGB, which is why a plain contrast pass shows up
+            // as just blur with no merge).
             ctx.save();
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.globalAlpha = fadeOut;
-            ctx.filter = 'blur(12px) contrast(20)';
+            ctx.filter = 'url(#deathGoo)';
             ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
             ctx.filter = 'none';
             ctx.globalAlpha = 1;
