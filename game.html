@@ -1008,6 +1008,14 @@ function _spawnDeathMeltBalls() {
     const samples = poly
         ? _sampleInPoly(poly, N)
         : null;
+    // Pick a small fixed set of indices to be the visible splash
+    // droplets — total count, not a percentage. Everything else is
+    // pure cohesive collapse.
+    const splashCount = 10 + Math.floor(Math.random() * 6); // 10-15 droplets total
+    const splashSet = new Set();
+    while (splashSet.size < splashCount) {
+        splashSet.add(Math.floor(Math.random() * N));
+    }
     for (let i = 0; i < N; i++) {
         let sx, sy;
         if (samples) {
@@ -1020,17 +1028,15 @@ function _spawnDeathMeltBalls() {
             sy = player.y - 8 + Math.sin(a) * rr * 0.85;
         }
         const vAng = Math.atan2(sy - player.y, sx - player.x);
-        // Liquid physics: the bulk of the mass holds together via
-        // cohesion and just falls under gravity (essentially zero
-        // sideways velocity). Only a tiny fraction breaks free as
-        // visible splash droplets with real parabolic arcs.
-        const splashy = Math.random() < 0.04;          // ~4% are droplets
-        const vSpd = (splashy
-            ? 6 + Math.random() * 6                    // 6-12: real arc
-            : Math.random() * 0.25) * sizeScale;       // 0-0.25: cohesion
-        const vKickY = (splashy
-            ? 5 + Math.random() * 5                    // 5-10: clear hop
-            : Math.random() * 0.4) * sizeScale;
+        // Bulk of the mass is cohesive and just falls; only the
+        // pre-chosen splash droplets have any visible lateral motion.
+        const splashy = splashSet.has(i);
+        const vSpd = splashy
+            ? (4 + Math.random() * 4) * sizeScale      // 4-8 droplet arc
+            : 0;                                       // bulk: pure fall
+        const vKickY = splashy
+            ? (3 + Math.random() * 3) * sizeScale      // 3-6 droplet hop
+            : 0;
         deathBalls.push({
             x: sx, y: sy,
             vx: Math.cos(vAng) * vSpd,
@@ -1080,7 +1086,7 @@ function _tickDeathMelt(dt) {
     const groundY = _deathGroundY;
     deathBalls.forEach(b => {
         if (!b.landed) {
-            b.vy += 0.7 * dt;
+            b.vy += 0.4 * dt;
             b.x  += b.vx * dt;
             b.y  += b.vy * dt;
             // Low air drag — liquid droplets retain horizontal momentum.
