@@ -1020,23 +1020,24 @@ function _spawnDeathMeltBalls() {
             sy = player.y - 8 + Math.sin(a) * rr * 0.85;
         }
         const vAng = Math.atan2(sy - player.y, sx - player.x);
-        // Very subtle burst — barely any initial motion; gravity does
-        // essentially all the work. Reads as a liquid mass collapsing
-        // straight down with tiny outward bias.
-        const splashy = Math.random() < 0.12;
+        // Liquid physics: the bulk of the mass holds together via
+        // cohesion and just falls under gravity (essentially zero
+        // sideways velocity). Only a tiny fraction breaks free as
+        // visible splash droplets with real parabolic arcs.
+        const splashy = Math.random() < 0.04;          // ~4% are droplets
         const vSpd = (splashy
-            ? 1 + Math.random() * 2
-            : 0.1 + Math.random() * 0.6) * sizeScale;
+            ? 6 + Math.random() * 6                    // 6-12: real arc
+            : Math.random() * 0.25) * sizeScale;       // 0-0.25: cohesion
         const vKickY = (splashy
-            ? 1 + Math.random() * 2
-            : 0.2 + Math.random() * 0.8) * sizeScale;
+            ? 5 + Math.random() * 5                    // 5-10: clear hop
+            : Math.random() * 0.4) * sizeScale;
         deathBalls.push({
             x: sx, y: sy,
-            vx: Math.cos(vAng) * vSpd + (Math.random() - 0.5) * 0.4 * sizeScale,
-            vy: Math.sin(vAng) * vSpd * 0.5 - vKickY,
+            vx: Math.cos(vAng) * vSpd,
+            vy: Math.sin(vAng) * vSpd * 0.4 - vKickY,
             r: 24 + Math.random() * 56,
             landed: false,
-            canBounce: Math.random() < 0.08,
+            canBounce: false,                          // liquid absorbs
             squeezed: 0,
         });
     }
@@ -1082,7 +1083,8 @@ function _tickDeathMelt(dt) {
             b.vy += 0.7 * dt;
             b.x  += b.vx * dt;
             b.y  += b.vy * dt;
-            b.vx *= Math.pow(0.94, dt);
+            // Low air drag — liquid droplets retain horizontal momentum.
+            b.vx *= Math.pow(0.985, dt);
             if (b.y >= groundY && b.vy > 0) {
                 if (b.canBounce && Math.abs(b.vy) > 4) {
                     b.vy = -b.vy * 0.18;
