@@ -3234,19 +3234,55 @@ function draw() {
         });
     }
 
-    // Death explosion — semi-transparent spheres drawn directly in world
-    // space. Overlapping balls layer their alpha, so dense regions of
-    // the cluster read darker/saturated and sparse droplets read lighter.
-    // Creates a translucent jelly look layered with the character skin
-    // color, instead of a flat metaball silhouette.
+    // Death explosion — two-layer composite:
+    //   1. Metaball-merged silhouette (SVG goo filter) drawn translucently
+    //      so the cluster reads as one shape with soft skin tone.
+    //   2. Individual translucent balls drawn on top so the inner overlap
+    //      structure (denser = more saturated) shows through.
     if (winPhase === 3 && deathTimer >= DEATH_FREEZE && deathBalls.length > 0) {
         const fadeOut = Math.max(0, 1 - Math.max(0, deathTimer - (DEATH_DUR - 25)) / 25);
         if (fadeOut > 0) {
+            const dpr = window.devicePixelRatio || 1;
             const _sorted = deathBalls.slice().sort((a, b) =>
                 a.landed === b.landed ? a.y - b.y : (a.landed ? -1 : 1));
+
+            // Pass 1 — solid balls on meltCanvas
+            meltCtx.save();
+            meltCtx.setTransform(1, 0, 0, 1, 0, 0);
+            meltCtx.clearRect(0, 0, meltCanvas.width, meltCanvas.height);
+            meltCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            meltCtx.translate(view.w / 2, view.h / 2);
+            meltCtx.scale(camera.zoom, camera.zoom);
+            meltCtx.translate(-camera.x, -camera.y);
+            meltCtx.fillStyle = window.PLAYER_COLOR;
+            _sorted.forEach(b => {
+                meltCtx.save();
+                meltCtx.translate(b.x, b.y);
+                const sx = 1 + b.squeezed * 1.5;
+                const sy = Math.max(0.18, 1 - b.squeezed * 0.7);
+                meltCtx.scale(sx, sy);
+                meltCtx.beginPath();
+                meltCtx.arc(0, 0, b.r, 0, Math.PI * 2);
+                meltCtx.fill();
+                meltCtx.restore();
+            });
+            meltCtx.restore();
+
+            // Pass 2 — merged silhouette base (goo filter, translucent)
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.globalAlpha = 0.5 * fadeOut;
+            ctx.filter = 'url(#deathGoo)';
+            ctx.drawImage(meltCanvas, 0, 0, view.w, view.h);
+            ctx.filter = 'none';
+            ctx.globalAlpha = 1;
+            ctx.restore();
+
+            // Pass 3 — translucent individual balls in world space for
+            // visible overlap layering inside the merged shape
             ctx.save();
             ctx.fillStyle = window.PLAYER_COLOR;
-            ctx.globalAlpha = 0.35 * fadeOut;
+            ctx.globalAlpha = 0.22 * fadeOut;
             _sorted.forEach(b => {
                 ctx.save();
                 ctx.translate(b.x, b.y);
