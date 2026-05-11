@@ -1073,6 +1073,14 @@ function _playerDeathFade() {
     return deathTimer < DEATH_FREEZE ? 1 : 0;
 }
 
+// Standard-enemy hit reads as a strobing flicker on the character
+// while hitCooldown ticks down. Bright/dim toggle every ~3 frames so
+// it feels like a damage strobe, not a smooth fade.
+function _playerHitFlicker() {
+    if (hitCooldown <= 0) return 1;
+    return (Math.floor(hitCooldown / 3) % 2 === 0) ? 1 : 0.18;
+}
+
 function _tickDeathMelt(dt) {
     if (winPhase !== 3) return;
     if (deathTimer < DEATH_FREEZE) return;
@@ -2175,14 +2183,16 @@ function update() {
                     }
                 } else {
                     if (en.type === 'standard') {
-                        // Spiky enemy: lose 1 HP only, items stay
+                        // Spiky enemy: lose 1 HP only, items stay.
+                        // Impact reads via shake + flash + character
+                        // flicker (driven by hitCooldown); no particle
+                        // burst on the player.
                         health--;
                         player.anim.hit = 1;
                         spawnEnemyDebris(en.x, en.y, '#3e3e3e');
                         updateHealthUI();
                         shakeTime = 15; flashAlpha = 0.7; hitCooldown = 60;
                         haptic([30, 10, 60]); sfxHit();
-                        spawnHitSplash(player.x, player.y);
                         const _ne3 = spawnEnemy();
                         if (_ne3) enemies[idx] = _ne3; else enemies.splice(idx, 1);
 
@@ -3146,7 +3156,7 @@ function draw() {
     entityCtx.restore();
 
     ctx.globalCompositeOperation = 'source-over';
-    const _pFade = _playerDeathFade();
+    const _pFade = _playerDeathFade() * _playerHitFlicker();
     if (_pFade > 0) {
         ctx.globalAlpha = _pFade;
         ctx.drawImage(entityCanvas, 0, 0, view.w, view.h);
@@ -3278,7 +3288,7 @@ function draw() {
 
     ctx.save();
     ctx.translate(player.x, player.y-15);
-    ctx.globalAlpha = _playerDeathFade();
+    ctx.globalAlpha = _playerDeathFade() * _playerHitFlicker();
 
         if (player.anim.mouth > 0.5) ctx.translate(Math.sin(player.anim.time*40)*1.5, Math.cos(player.anim.time*45)*1.5);
 
